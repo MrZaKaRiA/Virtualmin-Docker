@@ -1085,6 +1085,68 @@ return (0, "Context updated");
 }
 
 # ----------------------------------------------------------------------------
+# Ports & Virtualmin proxy integration
+# ----------------------------------------------------------------------------
+
+# container_host_ports(PORTS) - the published host ports from a "docker ps"
+# .Ports string such as "0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp".
+sub container_host_ports
+{
+my ($s) = @_;
+my %seen;
+while (defined($s) && $s =~ /(\d+)->/g) { $seen{$1} = 1; }
+return sort { $a <=> $b } keys %seen;
+}
+
+# format_ports(PORTS) - a de-duplicated, compact "host->container/proto" list.
+sub format_ports
+{
+my ($s) = @_;
+return '' if (!defined($s) || $s eq '');
+my %seen;
+while ($s =~ /(\d+)->(\d+\/\w+)/g) { $seen{"$1->$2"} = 1; }
+my @m = sort keys %seen;
+return @m ? join(", ", @m) : $s;
+}
+
+# proxy_map() -> hashref { host_port => [ domain, ... ] }, built from Virtualmin
+# virtual servers that proxy to a local port (Website Proxy Settings). Returns an
+# empty map when Virtualmin is not present or the feature is disabled - it never
+# errors, so it is safe to call on any host.
+sub proxy_map
+{
+my %map;
+return \%map if (defined($config{'show_proxy'}) && !$config{'show_proxy'});
+my $base = $ENV{'WEBMIN_CONFIG'} || '/etc/webmin';
+my $dir = "$base/virtual-server/domains";
+return \%map if (!-d $dir);
+my $dh;
+opendir($dh, $dir) || return \%map;
+my @files = grep { /^\d+$/ } readdir($dh);
+closedir($dh);
+foreach my $f (@files) {
+	my %dom;
+	eval { &read_file("$dir/$f", \%dom); };
+	next if (!$dom{'proxy_pass'} || !$dom{'dom'});
+	my $port = ($dom{'proxy_pass'} =~ m!:(\d+)!) ? $1 :
+		   ($dom{'proxy_pass'} =~ m!^https:!i ? 443 : 80);
+	push(@{$map{$port}}, $dom{'dom'});
+	}
+return \%map;
+}
+
+# container_proxied_domains(PORTS, PROXYMAP) - domains proxying to this container.
+sub container_proxied_domains
+{
+my ($ports, $pmap) = @_;
+my %d;
+foreach my $p (&container_host_ports($ports)) {
+	foreach my $dom (@{$pmap->{$p} || []}) { $d{$dom} = 1; }
+	}
+return sort keys %d;
+}
+
+# ----------------------------------------------------------------------------
 # Shared UI helpers
 # ----------------------------------------------------------------------------
 

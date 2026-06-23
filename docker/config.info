@@ -1,5 +1,6 @@
 Display options,11
 show_stats=Show live CPU/memory stats in the container list?,1,1-Yes,0-No
+show_proxy=Show Virtualmin domains proxied to each container?,1,1-Yes,0-No
 max_log_lines=Default number of log lines to show,3,100
 widget_enabled=Show the Docker panel on the Webmin dashboard?,1,1-Yes,0-No
 Behaviour,11

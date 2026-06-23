@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-06-23
+
+### Added
+- **Virtualmin integration**: the container list now shows the Virtualmin
+  domains/subdomains whose Website Proxy Settings point at each container
+  (matched by published host port), linked through to the site. Toggle in
+  Module Config; silently empty on non-Virtualmin hosts.
+- **Ports column** in the container list (de-duplicated host→container mapping).
+
+### Fixed
+- Rename (and copy / commit / export) reported "Invalid or unknown container
+  reference" after succeeding: the redirect builder appended `?` to a URL that
+  already had a query string, corrupting the `id` parameter. It now appends `&`
+  when needed.
+
 ## [1.1.0] - 2026-06-23
 
 ### Added

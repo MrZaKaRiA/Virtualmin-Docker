@@ -29,7 +29,8 @@ my ($dest, $msg, $err) = @_;
 my @p;
 push(@p, "msg=".&urlize($msg)) if (defined($msg) && $msg ne '');
 push(@p, "err=".&urlize($err)) if (defined($err) && $err ne '');
-$dest .= "?".join("&", @p) if (@p);
+# Use '&' when the destination already carries a query string, else '?'.
+$dest .= ($dest =~ /\?/ ? "&" : "?").join("&", @p) if (@p);
 &redirect($dest);
 exit;
 }

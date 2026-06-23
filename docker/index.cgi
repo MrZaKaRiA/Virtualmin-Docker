@@ -94,14 +94,21 @@ else {
 		$stats = $s if (!$sfail);
 		}
 
+	# Map of host port -> Virtualmin domain(s) proxying to it (empty off Virtualmin).
+	my $pmap = &proxy_map();
+
 	print &ui_form_start("act.cgi", "post", undef, "id='contform'");
 	print &ui_hidden("c", "container_bulk");
 	print &bulk_select_links('contform', 'd')."<br>\n";
 	print &ui_columns_start([
 		"", $text{'cont_name'}, $text{'cont_status'}, $text{'cont_image'},
+		$text{'cont_ports'}, $text{'cont_proxy'},
 		$text{'cont_cpu'}, $text{'cont_mem'}, $text{'cont_actions'} ], 100);
 	foreach my $c (@$containers) {
 		my $st = $stats->{$c->{'id'}} || $stats->{$c->{'name'}} || {};
+		my @doms = &container_proxied_domains($c->{'ports'}, $pmap);
+		my $domhtml = @doms ? join("<br>", map {
+			&ui_link("http://".$_, &html_escape($_), undef, "target=_blank") } @doms) : "";
 		my $links = join(" | ",
 			&ui_link("container.cgi?tab=log&id=".&urlize($c->{'id'}), $text{'cont_logs'}),
 			&ui_link("container.cgi?tab=inspect&id=".&urlize($c->{'id'}), $text{'cont_inspect'}),
@@ -110,6 +117,8 @@ else {
 			&ui_link("container.cgi?id=".&urlize($c->{'id'}), &html_escape($c->{'name'})),
 			&state_label($c->{'state'}, $c->{'status'}),
 			&html_escape($c->{'image'}),
+			&html_escape(&format_ports($c->{'ports'})),
+			$domhtml,
 			&html_escape($st->{'cpu'} || ''),
 			&html_escape(($st->{'memusage'} || '').($st->{'mem'} ? " (".$st->{'mem'}.")" : '')),
 			$links,

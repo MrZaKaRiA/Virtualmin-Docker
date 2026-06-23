@@ -1,168 +1,204 @@
-# Webmin Docker
+<div align="center">
 
-A clean, security-first [Webmin](https://webmin.com) module for managing Docker
-from your browser — containers, images, volumes, networks, Compose projects,
-and image scanning — with a status panel on the Webmin home dashboard.
+# 🐳 Virtualmin Docker
 
-It is written from scratch with a single guiding rule: **no user input ever
-reaches a shell unescaped.** Webmin runs as root, so a Docker management module
-is a high-value target; this one is built to be safe by construction.
+### A clean, security-first Webmin & Virtualmin module for managing Docker from your browser
 
-> If you want a full standalone Docker UI, look at
-> [Portainer](https://www.portainer.io). This module is for people who already
-> run Webmin and want Docker management that fits naturally inside it.
+Containers · images · volumes · networks · Compose · backups · vulnerability scanning —
+with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 
-## Features
+[![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
+[![Webmin module](https://img.shields.io/badge/Webmin-module-FF6600.svg)](https://webmin.com)
+[![Virtualmin](https://img.shields.io/badge/Virtualmin-integrated-2E7D32.svg)](https://virtualmin.com)
+[![Version](https://img.shields.io/badge/version-1.2.0-success.svg)](CHANGELOG.md)
+[![Hardened](https://img.shields.io/badge/shell--injection-hardened-brightgreen.svg)](#-security-model)
+
+</div>
+
+---
+
+> **Why another Docker module?** Because a panel that runs **as root** has no business
+> pasting your input into a shell. Every Docker command in this module is built from
+> constant flags plus individually escaped values — proven, not promised
+> (see [Security model](#-security-model)). On top of that it's fast, responsive, and
+> it knows which of your Virtualmin sites proxy to which container.
+
+If you want a full standalone Docker UI, look at [Portainer](https://www.portainer.io).
+This module is for people who already live in **Webmin / Virtualmin** and want Docker
+management that fits right in — under **Servers → Docker**.
+
+## ✨ Highlights
+
+- 🔒 **Injection-proof by construction** — no user input ever reaches `/bin/sh` unescaped.
+- 🧭 **One-glance dashboard** — running/paused/stopped counts, disk usage, and a clickable home-screen widget.
+- 🌐 **Virtualmin-aware** — see the domains/subdomains reverse-proxied to each container, right in the list.
+- 🧰 **Everything you actually do** — full lifecycle, bulk actions, images, Compose, storage, backups, scanning.
+- 👥 **Granular access control** — grant or deny each capability per Webmin user.
+- 📝 **Audited** — every change is written to the Webmin Actions Log.
+
+## 📸 Screenshots
+
+> Drop your own PNGs into `docs/screenshots/` — they'll render here.
+
+| Dashboard & containers | Home-screen widget |
+| --- | --- |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Widget](docs/screenshots/widget.png) |
+
+## 🚀 Features
+
+<table>
+<tr><td valign="top" width="50%">
 
 **Dashboard**
-- Running / paused / stopped container counts and image count
+- Running / paused / stopped / image counts
 - `docker system df` disk-usage breakdown
-- A **home-screen widget** that shows Docker status in the Webmin dashboard
-  (the same area as "Servers Status")
+- Clickable **home-screen widget** on the Webmin dashboard
 
 **Containers**
-- List with live CPU / memory, start, stop, restart, pause, unpause, kill,
-  remove, rename, update resources (memory / cpus / pids / restart policy)
-- **Bulk select-and-act** on many containers at once
-- Create a container (env / ports / volumes / network / limits, optional
-  hardened defaults) and clone an existing one
-- Per-container **logs** (timestamps, since, text filter, auto-refresh,
-  download), **inspect**, non-interactive **exec** with quick-command buttons,
-  live **stats**, and host ↔ container file copy
+- List with live CPU / memory, **ports**, and **proxied domains**
+- Start · stop · restart · pause · unpause · kill
+- Remove · rename · update resources · clone
+- **Bulk select-and-act** on many at once
+- Per-container **logs** (timestamps, since, filter, auto-refresh, download),
+  **inspect**, non-interactive **exec** with quick-command buttons, live **stats**
 
 **Images**
-- List, inspect, history, remove, pull, push, tag
-- Build from an inline Dockerfile, run a new container from an image
-- **Docker Hub search** and prune (dangling or all unused)
+- List · inspect · history · remove · pull · push · tag
+- Build from an inline Dockerfile · run a new container
+- **Docker Hub search** · prune
+
+</td><td valign="top" width="50%">
 
 **Compose**
-- List projects (`docker compose ls`) and run up / down / status / logs /
-  validate against any Compose file (v2 plugin, with legacy `docker-compose`
-  fallback)
+- List projects + up / down / status / logs / validate (v2, with v1 fallback)
 
 **Storage**
-- Volumes and networks: list, inspect, create, remove, prune
+- Volumes & networks: list · inspect · create · remove · prune
 
 **Backup & restore**
-- Images: save to / load from a host tar (`docker save` / `docker load`)
-- Containers: commit to a new image, or export the filesystem to a tar
-- Volumes: back up and restore a local volume's data as a `.tar.gz`
+- Images: `save` / `load` to a host tar
+- Containers: commit to an image · export the filesystem
+- Volumes: back up & restore a local volume as `.tar.gz`
 
 **Maintenance**
-- `system prune` and `builder prune` (build cache), each with a confirmation
+- `system prune` & `builder prune`, each with a confirmation
 
 **Security**
-- Image vulnerability scanning via **Docker Scout** or **Trivy**
-  (the removed `docker scan` is not used)
+- Image scanning via **Docker Scout** or **Trivy**
 
 **Registry & contexts**
-- Log in to a registry for private images, and switch the Docker context the
-  module talks to (rootless Docker is supported via contexts)
+- Private-registry login · switch Docker context (rootless-friendly)
 
-**Monitors**
-- "Docker Up" and "Docker Container Up" monitor types for the
-  [System and Server Status](https://webmin.com/docs/modules/system-and-server-status/)
-  module
+**Monitoring**
+- "Docker Up" & "Container Up" monitor types for **System and Server Status**
 
-## Security model
+</td></tr>
+</table>
 
-This is the reason the module exists, so it is worth stating plainly:
+## 🌐 Virtualmin integration
 
-- **No shell injection.** Webmin's command runners all execute through
-  `/bin/sh -c`. Every value originating from a form, a config file, or Docker
-  output is wrapped with a single-quote shell escaper (`sq()`) before it is
-  placed in a command. Constant flags are literals; user values are quoted
-  tokens — they can never be read as extra flags or shell metacharacters.
-- **Allowlist validation.** Container / image / volume / network identifiers
-  are validated against anchored regexes before use, rejecting control
-  characters, leading dashes, and path traversal.
-- **POST-only, referer-checked, audited mutations.** Every state change goes
-  through one dispatcher (`act.cgi`) that is reached only by POST (so Webmin's
-  trusted-referer check applies), is gated by a per-action ACL, and is recorded
-  with `webmin_log` for the Actions Log.
-- **Secrets via stdin.** Registry passwords are passed to
-  `docker login --password-stdin` through the child process's standard input —
-  never on the command line, never via `echo`, and they are not stored by the
-  module.
-- **Granular ACL.** Webmin users can be granted or denied each capability
-  independently (view / manage / create / delete / exec / prune / backup /
-  registry / context) under **Webmin Users → user → Docker**. The default
-  grant is full access (you are the admin); tighten it per-user as needed.
-- **Output escaping.** All Docker output (names, statuses, error text) is
-  HTML-escaped before display to prevent stored XSS from container labels.
-- **Destructive-action confirmations** for remove and prune (configurable).
+Running Docker behind Virtualmin virtual servers? When a site has **Website Proxy
+Settings → Proxying enabled** pointing at a local port (e.g. `http://localhost:3000`),
+this module matches that port to the container publishing it and shows the
+domain right in the container list:
 
-## Requirements
+| Name | Status | Image | Ports | Proxied to |
+| --- | --- | --- | --- | --- |
+| `twenty-server-1` | 🟢 Up (healthy) | `twentycrm/twenty` | `3000->3000/tcp` | [crm.example.com](#) |
 
-- A host with Webmin installed
-- The Docker engine and CLI (`docker`) available to the Webmin user
+It reads Virtualmin's domain definitions read-only, links each domain through to
+the live site, and **degrades silently to nothing on non-Virtualmin hosts**. Turn it
+off any time in **Module Config**.
+
+## 🔒 Security model
+
+This is the whole reason the module exists.
+
+| Guarantee | How |
+| --- | --- |
+| **No shell injection** | Every value from a form, config, or Docker output is wrapped with a single-quote escaper (`sq()`); constant flags stay literal. Verified by round-tripping `$()`, backticks, `;`, `\|`, `&&`, newlines and `-v /:/host` through a real `/bin/sh`. |
+| **Allowlist validation** | Container/image/volume/network identifiers are checked against anchored regexes before use — rejecting control characters, leading dashes and path traversal. |
+| **POST-only, referer-checked, audited** | All mutations go through one dispatcher (`act.cgi`) reached only by POST, gated by ACL, and logged with `webmin_log`. |
+| **Secrets via stdin** | Registry passwords are fed to `docker login --password-stdin` over the child's STDIN — never on argv, never via `echo`, never stored. |
+| **XSS-safe output** | All Docker output (names, statuses, error text) is HTML-escaped before display. |
+| **Confirmations** | Destructive actions (remove / prune / restore) ask first. |
+
+## 📦 Requirements
+
+- A host running **Webmin** (or **Virtualmin**)
+- The Docker engine + CLI (`docker`) available to the Webmin user
 - Perl `JSON::PP` (ships with Perl 5.14+)
-- Optional: `docker compose` (v2) for Compose, and `docker scout` or `trivy`
-  for scanning
+- Optional: `docker compose` (v2), and `docker scout` or `trivy` for scanning
 
-## Install
+## ⚙️ Installation
 
-1. Download `docker.wbm.gz` from the
-   [latest release](../../releases/latest).
-2. In Webmin go to **Webmin → Webmin Configuration → Webmin Modules**, choose
-   **From local file** (or **From uploaded file**), select the package, and
-   install.
-3. The module appears under **Servers → Docker**. The dashboard widget appears
-   on the Webmin home page once the **System and Server Status** module is
-   installed and enabled in your dashboard settings.
+1. Download **`docker.wbm.gz`** from the [latest release](../../releases/latest).
+2. In Webmin go to **Webmin Configuration → Webmin Modules → From uploaded file**,
+   choose the package, and click **Install Module**.
+3. Open it under **Servers → Docker**. The dashboard widget appears once the
+   **System and Server Status** module is installed and enabled.
 
-To build the package yourself from a checkout:
+Build it yourself from a checkout:
 
 ```sh
-tar -czf docker.wbm.gz docker
+tar -czf docker.wbm.gz docker     # top-level dir in the archive must be "docker"
 ```
 
-(The top-level directory in the archive must be `docker`.)
-
-## Rootless Docker
-
-Rootless Docker is supported through
-[Docker contexts](https://docs.docker.com/engine/manage-resources/contexts/).
-Create a context for the rootless socket, then either run
-`docker context use <name>` or set the context override under
-**Contexts** in the module (or in **Module Config**).
-
-## Configuration
+## 🛠️ Configuration
 
 **Module Config** (top-left cog) exposes:
 
-- Show live CPU / memory stats in the list
-- Default number of log lines
-- Show the dashboard widget
+- Show live CPU/memory stats in the list
+- Show Virtualmin domains proxied to each container
+- Default number of log lines · show the dashboard widget
 - Confirm before destructive actions
 - Preferred image scanner (auto / Docker Scout / Trivy)
-- Default Compose file path
-- Default backup directory
-- Docker context override
+- Default Compose file path · default backup directory · Docker context override
 
-## Module layout
+## 👥 Access control
+
+Under **Webmin Users → _user_ → Docker**, grant or deny each capability
+independently: **view · manage · create · delete · exec · prune · backup ·
+registry · context**. The default grant is **full access** (you're the admin) —
+tighten it per-user as needed.
+
+## 🧩 Rootless Docker
+
+Supported via [Docker contexts](https://docs.docker.com/engine/manage-resources/contexts/).
+Create a context for the rootless socket, then `docker context use <name>` or set
+the context override in the module's **Contexts** page.
+
+## 🗂️ Module layout
 
 | File | Purpose |
-|------|---------|
-| `docker-lib.pl` | Secure core: shell quoting, validation, and all Docker operations |
+| --- | --- |
+| `docker-lib.pl` | Secure core: shell quoting, validation, every Docker operation, Virtualmin proxy lookup |
 | `index.cgi` | Overview dashboard + container management |
-| `container.cgi` | Per-container logs / inspect / exec / stats / manage |
-| `images.cgi`, `compose.cgi`, `storage.cgi`, `maintenance.cgi`, `security.cgi`, `registry.cgi`, `contexts.cgi` | Section pages |
+| `container.cgi` | Per-container logs / inspect / exec / stats / manage / backup |
+| `images · compose · storage · maintenance · security · registry · contexts .cgi` | Section pages |
 | `act.cgi` | The single POST action dispatcher (ACL-gated, audited) |
 | `system_info.pl` | Home-screen dashboard widget |
 | `status_monitor.pl` | Monitor types for System and Server Status |
-| `acl_security.pl`, `defaultacl` | Per-user access control |
-| `log_parser.pl` | Renders audit-log entries |
-| `install_check.pl` | Auto-detection of Docker |
+| `acl_security.pl` · `defaultacl` | Per-user access control |
+| `log_parser.pl` · `install_check.pl` | Audit-log rendering · Docker auto-detection |
 
-## License
+## 🤝 Contributing
 
-Copyright (C) 2026 MrZaKaRiA
+Issues and pull requests are welcome. Every `.cgi`/`.pl` file is validated with
+`perl -c` in CI, and changes to command construction should keep the `sq()` +
+allowlist discipline described above.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the [GNU General Public License version 2](LICENSE) as published
-by the Free Software Foundation.
+## 📜 License
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU General Public License for more details.
+Copyright © 2026 MrZaKaRiA.
+
+This program is free software; you can redistribute it and/or modify it under the
+terms of the [GNU General Public License version 2](LICENSE) as published by the
+Free Software Foundation. It is distributed **without any warranty** — see the
+license for details.
+
+---
+
+<div align="center">
+<sub>Built for the Webmin & Virtualmin community. Not affiliated with Docker, Inc.</sub>
+</div>

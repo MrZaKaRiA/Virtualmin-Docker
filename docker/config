@@ -1,5 +1,6 @@
 docker_context=
 show_stats=1
+show_proxy=1
 confirm_destructive=1
 max_log_lines=100
 scanner=auto
