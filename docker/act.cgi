@@ -218,6 +218,50 @@ elsif ($c eq 'prune_images') {
 	&render($text{'img_prune'}, $o);
 	}
 
+# ---- backup & restore ------------------------------------------------------
+
+elsif ($c eq 'image_save') {
+	&require_acl('backup');
+	my ($f, $o) = &save_image($in{'image'}, $in{'path'});
+	&webmin_log("save", "image", $in{'image'}, { 'path' => $in{'path'} }) if (!$f);
+	&redir("images.cgi", $f ? undef : $text{'msg_saved'}, $f ? $o : undef);
+	}
+elsif ($c eq 'image_load') {
+	&require_acl('backup');
+	my ($f, $o) = &load_image($in{'path'});
+	&webmin_log("load", "image", $in{'path'}) if (!$f);
+	&render($text{'backup_load'}, $o eq '' ? $text{'exec_nooutput'} : $o);
+	}
+elsif ($c eq 'container_commit') {
+	&require_acl('backup');
+	my ($f, $o) = &commit_container($in{'id'}, $in{'image'});
+	&webmin_log("commit", "container", $in{'id'}, { 'image' => $in{'image'} }) if (!$f);
+	&redir("container.cgi?tab=manage&id=".&urlize($in{'id'}),
+		$f ? undef : $text{'msg_committed'}, $f ? $o : undef);
+	}
+elsif ($c eq 'container_export') {
+	&require_acl('backup');
+	my ($f, $o) = &export_container($in{'id'}, $in{'path'});
+	&webmin_log("export", "container", $in{'id'}, { 'path' => $in{'path'} }) if (!$f);
+	&redir("container.cgi?tab=manage&id=".&urlize($in{'id'}),
+		$f ? undef : $text{'msg_exported'}, $f ? $o : undef);
+	}
+elsif ($c eq 'volume_backup') {
+	&require_acl('backup');
+	my ($f, $o) = &backup_volume($in{'name'}, $in{'path'});
+	&webmin_log("backup", "volume", $in{'name'}, { 'path' => $in{'path'} }) if (!$f);
+	&redir("storage.cgi", $f ? undef : $text{'msg_backed_up'}, $f ? $o : undef);
+	}
+elsif ($c eq 'volume_restore') {
+	&require_acl('backup');
+	&confirm($text{'stor_restore_volume'}, $text{'confirm_restore'},
+		[ ("c", "volume_restore"), ("name", $in{'name'}), ("path", $in{'path'}) ],
+		$text{'stor_restore_volume'}, 'warn');
+	my ($f, $o) = &restore_volume($in{'name'}, $in{'path'});
+	&webmin_log("restore", "volume", $in{'name'}, { 'path' => $in{'path'} }) if (!$f);
+	&redir("storage.cgi", $f ? undef : $text{'msg_restored'}, $f ? $o : undef);
+	}
+
 # ---- storage (volumes & networks) -----------------------------------------
 
 elsif ($c eq 'volume_create') {

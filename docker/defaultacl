@@ -1,8 +1,9 @@
 view=1
 manage=1
-create=0
-delete=0
-exec=0
-prune=0
-registry=0
-context=0
+create=1
+delete=1
+exec=1
+prune=1
+registry=1
+context=1
+backup=1

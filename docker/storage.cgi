@@ -68,6 +68,28 @@ if (&can('prune')) {
 	print &ui_form_end([ [ undef, $text{'stor_prune_volumes'} ] ]);
 	}
 
+# Volume backup / restore (local volumes, via host tar).
+if (&can('backup') && !$vf && @$vols) {
+	my $bdir = $config{'backup_dir'} || "/var/backups/docker";
+	my @vopts = map { [ $_->{'name'}, $_->{'name'} ] } @$vols;
+
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "volume_backup");
+	print &ui_table_start($text{'stor_backup_volume'}, undef, 2);
+	print &ui_table_row($text{'stor_name'}, &ui_select("name", "", \@vopts));
+	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/volume.tar.gz", 50));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'stor_backup_button'} ] ]);
+
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "volume_restore");
+	print &ui_table_start($text{'stor_restore_volume'}, undef, 2);
+	print &ui_table_row($text{'stor_name'}, &ui_select("name", "", \@vopts));
+	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/volume.tar.gz", 50));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'stor_restore_button'} ] ]);
+	}
+
 # ---- Networks --------------------------------------------------------------
 print &ui_hr();
 print &ui_subheading($text{'stor_networks'});

@@ -6,4 +6,5 @@ Behaviour,11
 confirm_destructive=Confirm before destructive actions (remove / prune)?,1,1-Yes,0-No
 scanner=Preferred image scanner,1,auto-Auto detect,scout-Docker Scout,trivy-Trivy
 compose_file=Default Compose file path,0
+backup_dir=Default backup directory,0
 docker_context=Docker context override (blank = default),0

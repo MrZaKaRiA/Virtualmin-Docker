@@ -196,7 +196,42 @@ if (&can('manage')) {
 	print &ui_table_end();
 	print &ui_form_end([ [ undef, $text{'manage_update_button'} ] ]);
 	}
-else {
+
+# Backup: commit to an image / export the filesystem to a host tar.
+if (&can('backup')) {
+	my $bdir = $config{'backup_dir'} || "/var/backups/docker";
+	print &ui_hr();
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "container_commit");
+	print &ui_hidden("id", $id);
+	print &ui_table_start($text{'container_commit'}, undef, 2);
+	print &ui_table_row($text{'container_commit_image'}, &ui_textbox("image", "", 30));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'container_commit_button'} ] ]);
+
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "container_export");
+	print &ui_hidden("id", $id);
+	print &ui_table_start($text{'container_export'}, undef, 2);
+	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/$disp.tar", 50));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'container_export_button'} ] ]);
+	}
+
+# Remove this container.
+if (&can('delete')) {
+	print &ui_hr();
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "container_bulk");
+	print &ui_hidden("d", $id);
+	print &ui_hidden("remove", 1);
+	print &ui_table_start($text{'manage_remove'}, undef, 2);
+	print &ui_table_row($text{'manage_remove_hint'}, "&nbsp;");
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'manage_remove_button'} ] ]);
+	}
+
+if (!&can('manage') && !&can('backup') && !&can('delete')) {
 	print &ui_alert_box($text{'err_noperm'}, 'warn');
 	}
 print &ui_tabs_end_tab();

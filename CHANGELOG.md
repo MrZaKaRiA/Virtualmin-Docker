@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-06-23
+
+### Added
+- **Backup & restore**: save/load images (`docker save`/`load`), commit a
+  container to an image, export a container's filesystem, and back up / restore
+  local volumes as `.tar.gz` (via host `tar`). Gated by a new `backup` ACL and a
+  configurable default backup directory.
+- A clear **Remove container** action on the container Manage tab (in addition
+  to the bulk Remove in the list).
+- The **home-screen widget is now clickable** — its title, counts and an
+  "Open Docker" link go straight into the module.
+
+### Changed
+- Default ACL is now **full access** (the installing admin), tightened per-user
+  as needed — previously the least-privilege defaults hid delete/exec/prune even
+  from the admin.
+- Fixed the page footer showing "Return to Return to Docker" (the theme already
+  prepends "Return to").
+
 ## [1.0.0] - 2026-06-23
 
 Initial release. A clean, security-first Webmin module for managing Docker.

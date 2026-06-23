@@ -4,4 +4,5 @@ confirm_destructive=1
 max_log_lines=100
 scanner=auto
 compose_file=docker-compose.yml
+backup_dir=/var/backups/docker
 widget_enabled=1

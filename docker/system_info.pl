@@ -30,23 +30,30 @@ if (!$sum->{'ok'}) {
 		} );
 	}
 
+# Link the panel straight into the module.
+my $url = &get_webprefix()."/$module_name/";
+my $link = sub { my ($v) = @_; return "<a href='$url'>$v</a>"; };
+
 my @table;
 push(@table, { 'desc'  => $text{'dash_running'},
-	       'value' => &ui_text_color($sum->{'running'} || 0, 'success'),
+	       'value' => &$link(&ui_text_color($sum->{'running'} || 0, 'success')),
 	       'chart' => [ $sum->{'containers'} || 0, $sum->{'running'} || 0 ] });
 push(@table, { 'desc'  => $text{'dash_paused'},
-	       'value' => &ui_text_color($sum->{'paused'} || 0, $sum->{'paused'} ? 'warn' : 'success') });
+	       'value' => &$link(&ui_text_color($sum->{'paused'} || 0, $sum->{'paused'} ? 'warn' : 'success')) });
 push(@table, { 'desc'  => $text{'dash_stopped'},
-	       'value' => &ui_text_color($sum->{'stopped'} || 0, $sum->{'stopped'} ? 'danger' : 'success') });
+	       'value' => &$link(&ui_text_color($sum->{'stopped'} || 0, $sum->{'stopped'} ? 'danger' : 'success')) });
 push(@table, { 'desc'  => $text{'dash_images'},
-	       'value' => $sum->{'images'} || 0 });
+	       'value' => &$link($sum->{'images'} || 0) });
 push(@table, { 'desc'  => $text{'widget_version'},
 	       'value' => &html_escape($sum->{'version'} || '?') });
+push(@table, { 'desc'  => '',
+	       'value' => "<a href='$url'>".&html_escape($text{'widget_open'})." &raquo;</a>",
+	       'wide'  => 1 });
 
 return ( {
 	'type'     => 'table',
 	'id'       => $module_name.'_summary',
-	'desc'     => $text{'widget_title'},
+	'desc'     => "<a href='$url'>".&html_escape($text{'widget_title'})."</a>",
 	'open'     => 1,
 	'priority' => 6,
 	'table'    => \@table,

@@ -150,6 +150,25 @@ if (&can('create')) {
 	print &ui_form_end([ [ undef, $text{'img_run'} ] ]);
 	}
 
+if (&can('backup')) {
+	my $bdir = $config{'backup_dir'} || "/var/backups/docker";
+	print &ui_hr();
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "image_save");
+	print &ui_table_start($text{'backup_image_save'}, undef, 2);
+	print &ui_table_row($text{'create_image'}, &ui_textbox("image", "", 40));
+	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/image.tar", 50));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'backup_save'} ] ]);
+
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "image_load");
+	print &ui_table_start($text{'backup_image_load'}, undef, 2);
+	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/image.tar", 50));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'backup_load'} ] ]);
+	}
+
 if (&can('prune')) {
 	print &ui_hr();
 	print &ui_form_start("act.cgi", "post");

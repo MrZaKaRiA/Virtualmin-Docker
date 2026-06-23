@@ -43,6 +43,11 @@ is a high-value target; this one is built to be safe by construction.
 **Storage**
 - Volumes and networks: list, inspect, create, remove, prune
 
+**Backup & restore**
+- Images: save to / load from a host tar (`docker save` / `docker load`)
+- Containers: commit to a new image, or export the filesystem to a tar
+- Volumes: back up and restore a local volume's data as a `.tar.gz`
+
 **Maintenance**
 - `system prune` and `builder prune` (build cache), each with a confirmation
 
@@ -79,9 +84,10 @@ This is the reason the module exists, so it is worth stating plainly:
   `docker login --password-stdin` through the child process's standard input —
   never on the command line, never via `echo`, and they are not stored by the
   module.
-- **Least-privilege ACL.** Webmin users can be granted or denied each
-  capability independently (view / manage / create / delete / exec / prune /
-  registry / context). New grants default to view + basic lifecycle only.
+- **Granular ACL.** Webmin users can be granted or denied each capability
+  independently (view / manage / create / delete / exec / prune / backup /
+  registry / context) under **Webmin Users → user → Docker**. The default
+  grant is full access (you are the admin); tighten it per-user as needed.
 - **Output escaping.** All Docker output (names, statuses, error text) is
   HTML-escaped before display to prevent stored XSS from container labels.
 - **Destructive-action confirmations** for remove and prune (configurable).
@@ -131,6 +137,7 @@ Create a context for the rootless socket, then either run
 - Confirm before destructive actions
 - Preferred image scanner (auto / Docker Scout / Trivy)
 - Default Compose file path
+- Default backup directory
 - Docker context override
 
 ## Module layout

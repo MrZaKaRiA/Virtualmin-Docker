@@ -4,15 +4,14 @@
 
 do './docker-lib.pl';
 
-my @acl_keys = qw(view manage create delete exec prune registry context);
+my @acl_keys = qw(view manage create delete exec prune backup registry context);
 
 # acl_security_form(&access) - render the ACL editing form.
 sub acl_security_form
 {
 my ($access) = @_;
 foreach my $k (@acl_keys) {
-	my $def = ($k eq 'view' || $k eq 'manage') ? 1 : 0;
-	my $val = defined($access->{$k}) ? $access->{$k} : $def;
+	my $val = defined($access->{$k}) ? $access->{$k} : 1;
 	print &ui_table_row($text{'acl_'.$k},
 		&ui_yesno_radio($k, $val));
 	}

@@ -17,6 +17,8 @@ my %verb = (
 	'tag'     => 'Tagged', 'build' => 'Built', 'prune' => 'Pruned',
 	'compose' => 'Ran compose on', 'scan' => 'Scanned',
 	'login'   => 'Logged in to', 'context' => 'Switched context to',
+	'save'    => 'Saved', 'load' => 'Loaded', 'commit' => 'Committed',
+	'export'  => 'Exported', 'backup' => 'Backed up', 'restore' => 'Restored',
 	);
 my $v = $verb{$action} || $action;
 return "$v $type <tt>$obj</tt>";

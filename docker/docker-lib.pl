@@ -930,6 +930,109 @@ else {
 }
 
 # ----------------------------------------------------------------------------
+# Backup & restore
+# ----------------------------------------------------------------------------
+
+# valid_backup_path(PATH) - require an absolute, traversal-free host path.
+sub valid_backup_path
+{
+my ($p) = @_;
+return 0 if (!&is_clean_token($p));
+return 0 if ($p !~ m!^/!);
+return 0 if ($p =~ /\.\./);
+return 1;
+}
+
+# save_image(IMAGE, PATH) - "docker save" an image to a host tar file.
+sub save_image
+{
+my ($image, $path) = @_;
+return (1, "Invalid image") if (!&is_valid_image($image) && !&is_valid_id($image));
+return (1, "Invalid output path") if (!&valid_backup_path($path));
+my ($failed, $out, $err) = &run_docker(
+	'image save --output '.&sq($path).' '.&sq($image), undef, 0);
+return ($failed, $failed ? ($err || $out) : ($out || ''));
+}
+
+# load_image(PATH) - "docker load" an image from a host tar file.
+sub load_image
+{
+my ($path) = @_;
+return (1, "Invalid input path") if (!&valid_backup_path($path));
+return (1, "File not found") if (!-r $path);
+my ($failed, $out, $err) = &run_docker('image load --input '.&sq($path), undef, 0);
+return ($failed, ($out || '').($err || ''));
+}
+
+# commit_container(REF, IMAGE) - snapshot a container as a new image.
+sub commit_container
+{
+my ($ref, $image) = @_;
+return (1, "Invalid container") if (!&is_valid_ref($ref));
+return (1, "Invalid image name") if (!&is_valid_image($image));
+my ($failed, $out, $err) = &run_docker(
+	'container commit '.&sq($ref).' '.&sq($image), undef, 0);
+return ($failed, $failed ? ($err || $out) : ($out || ''));
+}
+
+# export_container(REF, PATH) - "docker export" a container's filesystem.
+sub export_container
+{
+my ($ref, $path) = @_;
+return (1, "Invalid container") if (!&is_valid_ref($ref));
+return (1, "Invalid output path") if (!&valid_backup_path($path));
+my ($failed, $out, $err) = &run_docker(
+	'container export --output '.&sq($path).' '.&sq($ref), undef, 0);
+return ($failed, $failed ? ($err || $out) : ($out || ''));
+}
+
+# volume_mountpoint(NAME) - the host directory backing a local volume, or undef.
+sub volume_mountpoint
+{
+my ($name) = @_;
+return undef if (!&is_valid_ref($name));
+my ($f, $mp, $e) = &run_docker(
+	'volume inspect --format "{{.Mountpoint}}" '.&sq($name), undef, 1);
+$mp =~ s/^\s+|\s+$//g;
+return $f ? undef : $mp;
+}
+
+# backup_volume(NAME, PATH) - tar a local volume's data to a host .tar.gz.
+sub backup_volume
+{
+my ($name, $path) = @_;
+return (1, "Invalid volume") if (!&is_valid_ref($name));
+return (1, "Invalid output path") if (!&valid_backup_path($path));
+my $tar = &has_command('tar');
+return (1, "tar command not found on host") if (!$tar);
+my $mp = &volume_mountpoint($name);
+return (1, "Could not find the volume's host directory (only local volumes are supported)")
+	if (!$mp || !-d $mp);
+my $cmd = &sq($tar).' czf '.&sq($path).' -C '.&sq($mp).' .';
+my ($out, $err);
+my $status = &execute_command($cmd, undef, \$out, \$err, 0, 0);
+return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
+}
+
+# restore_volume(NAME, PATH) - extract a .tar.gz backup back into a volume.
+sub restore_volume
+{
+my ($name, $path) = @_;
+return (1, "Invalid volume") if (!&is_valid_ref($name));
+return (1, "Invalid input path") if (!&valid_backup_path($path));
+return (1, "Backup file not found") if (!-r $path);
+my $tar = &has_command('tar');
+return (1, "tar command not found on host") if (!$tar);
+my $mp = &volume_mountpoint($name);
+return (1, "Could not find the volume's host directory (only local volumes are supported)")
+	if (!$mp || !-d $mp);
+my $cmd = &sq($tar).' xzf '.&sq($path).' -C '.&sq($mp);
+my ($out, $err);
+my $status = &execute_command($cmd, undef, \$out, \$err, 0, 0);
+return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
+}
+
+# ----------------------------------------------------------------------------
 # Registry
 # ----------------------------------------------------------------------------
 

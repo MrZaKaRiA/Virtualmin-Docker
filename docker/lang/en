@@ -1,7 +1,7 @@
 index_title=Docker
 index_notinstalled=Docker was not found on this system. Install the Docker engine and CLI, then refresh this page.
-index_return=Return to Docker
-index_return_main=Docker
+index_return=Docker
+index_return_main=Webmin index
 index_context=Using Docker context: $1
 index_daemondown=The Docker daemon is not reachable: $1
 
@@ -106,6 +106,21 @@ manage_rename_button=Rename
 manage_update=Update resources
 manage_pids=PID limit
 manage_update_button=Update
+manage_remove=Remove container
+manage_remove_hint=Permanently remove this container
+manage_remove_button=Remove container
+
+container_commit=Commit to a new image
+container_commit_image=New image name (e.g. mybackup:latest)
+container_commit_button=Commit
+container_export=Export filesystem to a file
+container_export_button=Export
+
+backup_path=File path
+backup_save=Save image
+backup_load=Load image
+backup_image_save=Export image to a file (docker save)
+backup_image_load=Import image from a file (docker load)
 
 img_title=Docker images
 img_none=No images found.
@@ -150,6 +165,10 @@ stor_prune_volumes=Prune unused volumes
 stor_remove_network=Remove networks
 stor_create_network=Create network
 stor_prune_networks=Prune unused networks
+stor_backup_volume=Back up volume
+stor_restore_volume=Restore volume
+stor_backup_button=Back up
+stor_restore_button=Restore
 
 compose_title=Docker Compose
 compose_notinstalled=Docker Compose is not installed on this host.
@@ -214,6 +233,7 @@ confirm_prune_networks=Remove all unused networks?
 confirm_system_prune=Remove all stopped containers, unused networks, dangling images and build cache?
 confirm_system_prune_all=Remove all stopped containers, unused networks, ALL unused images and build cache?
 confirm_builder_prune=Remove the build cache?
+confirm_restore=Restoring will overwrite files currently in the volume. Continue?
 
 msg_action=Performed $1 on the selected containers
 msg_removed=Removed the selected items
@@ -228,6 +248,11 @@ msg_volume_created=Volume created
 msg_network_created=Network created
 msg_registry=Registry login complete
 msg_context=Context updated
+msg_saved=Image saved
+msg_committed=Container committed to image
+msg_exported=Container exported
+msg_backed_up=Volume backed up
+msg_restored=Volume restored
 
 err_actionfailed=Failed to perform the requested action
 err_post=This action must be submitted as a POST request
@@ -243,6 +268,7 @@ acl_create=Can create containers and pull, build or tag images?
 acl_delete=Can remove containers, images, volumes and networks?
 acl_exec=Can run commands inside containers and copy files?
 acl_prune=Can prune images, volumes, networks and the system?
+acl_backup=Can back up and restore (save / load / commit / export)?
 acl_registry=Can log in to registries?
 acl_context=Can switch the Docker context?
 
