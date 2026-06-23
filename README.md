@@ -104,7 +104,7 @@ domain right in the container list:
 
 | Name | Status | Image | Ports | Proxied to |
 | --- | --- | --- | --- | --- |
-| `twenty-server-1` | 🟢 Up (healthy) | `twentycrm/twenty` | `3000->3000/tcp` | [crm.example.com](#) |
+| `server-1` | 🟢 Up (healthy) | `image/image` | `3000->3000/tcp` | [example.com](#) |
 
 It reads Virtualmin's domain definitions read-only, links each domain through to
 the live site, and **degrades silently to nothing on non-Virtualmin hosts**. Turn it
