@@ -1,0 +1,6 @@
+name=Docker
+desc=Docker
+category=servers
+longdesc=Manage Docker containers, images, volumes, networks and Compose projects
+os_support=*-linux
+version=1.0.0

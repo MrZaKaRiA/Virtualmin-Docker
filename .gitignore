@@ -1,0 +1,12 @@
+# Build artifacts
+*.wbm.gz
+*.wbm
+build/
+dist/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

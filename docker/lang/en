@@ -1,0 +1,261 @@
+index_title=Docker
+index_notinstalled=Docker was not found on this system. Install the Docker engine and CLI, then refresh this page.
+index_return=Return to Docker
+index_return_main=Docker
+index_context=Using Docker context: $1
+index_daemondown=The Docker daemon is not reachable: $1
+
+dash_running=Running
+dash_paused=Paused
+dash_stopped=Stopped
+dash_images=Images
+dash_type=Type
+dash_total=Total
+dash_active=Active
+dash_size=Size
+dash_reclaim=Reclaimable
+dash_host=Host $1 running Docker $2
+
+nav_images=Images
+nav_compose=Compose
+nav_storage=Storage
+nav_maintenance=Maintenance
+nav_security=Security
+nav_registry=Registry
+nav_contexts=Contexts
+
+cont_heading=Containers
+cont_none=No containers found.
+cont_name=Name
+cont_status=Status
+cont_image=Image
+cont_cpu=CPU
+cont_mem=Memory
+cont_actions=Actions
+cont_logs=Logs
+cont_inspect=Inspect
+cont_exec=Exec
+cont_title=Container $1
+cont_title_unknown=Container
+
+act_start=Start
+act_stop=Stop
+act_restart=Restart
+act_pause=Pause
+act_unpause=Unpause
+act_kill=Kill
+act_remove=Remove
+act_refresh=Refresh
+
+create_heading=Create container
+create_name=Name
+create_image=Image
+create_command=Command
+create_env=Environment (one KEY=value per line)
+create_ports=Ports (one host:container per line)
+create_volumes=Volumes (one host:container per line)
+create_network=Network
+create_restart=Restart policy
+create_default=Default
+create_memory=Memory limit (e.g. 512m)
+create_cpus=CPUs (e.g. 1.5)
+create_hardened=Apply hardened defaults (drop capabilities, no new privileges)?
+create_button=Create container
+
+clone_heading=Clone container
+clone_source=Source container
+clone_name=New name
+clone_button=Clone container
+
+tab_log=Log
+tab_inspect=Inspect
+tab_exec=Exec
+tab_stats=Stats
+tab_manage=Manage
+
+log_tail=Lines:
+log_since=Since:
+log_filter=Filter:
+log_timestamps=Timestamps
+log_nocase=Ignore case
+log_refresh=Auto refresh:
+log_never=Never
+log_download=Download full log
+stats_mem=Memory
+stats_net=Network I/O
+stats_block=Block I/O
+stats_pids=PIDs
+
+exec_quick=Quick commands
+exec_custom=Run a command
+exec_command=Command
+exec_run=Run
+exec_nooutput=(command produced no output)
+
+copy_to=Copy from host into container
+copy_from=Copy from container to host
+copy_host_path=Host path
+copy_target_path=Container target path
+copy_source_path=Container source path
+copy_host_dest=Host destination
+copy_button=Copy
+
+manage_rename=Rename container
+manage_newname=New name
+manage_rename_button=Rename
+manage_update=Update resources
+manage_pids=PID limit
+manage_update_button=Update
+
+img_title=Docker images
+img_none=No images found.
+img_name=Image
+img_size=Size
+img_created=Created
+img_history=History
+img_scan=Scan
+img_remove=Remove images
+img_inspect_of=Inspecting $1
+img_history_of=History of $1
+img_search=Search Docker Hub
+img_search_term=Term and limit
+img_search_button=Search
+img_search_none=No results.
+img_stars=Stars
+img_official=Official
+img_desc=Description
+img_pull=Pull
+img_push=Push
+img_from=Source image
+img_to=Target image
+img_tag=Tag image
+img_build=Build image
+img_build_tag=New tag
+img_dockerfile=Dockerfile contents
+img_run=Run new container from image
+img_prune=Prune images
+img_prune_all=Remove all unused images, not just dangling ones
+
+stor_title=Storage
+stor_volumes=Volumes
+stor_no_volumes=No volumes found.
+stor_networks=Networks
+stor_no_networks=No networks found.
+stor_name=Name
+stor_driver=Driver
+stor_mount=Mount point
+stor_remove_volume=Remove volumes
+stor_create_volume=Create volume
+stor_prune_volumes=Prune unused volumes
+stor_remove_network=Remove networks
+stor_create_network=Create network
+stor_prune_networks=Prune unused networks
+
+compose_title=Docker Compose
+compose_notinstalled=Docker Compose is not installed on this host.
+compose_projects=Projects
+compose_name=Project
+compose_files=Config files
+compose_heading=Run a Compose action
+compose_file=Compose file path
+compose_action=Action
+compose_up=Up (start in background)
+compose_down=Down (stop and remove)
+compose_ps=Status
+compose_logs=Logs
+compose_validate=Validate
+compose_down_volumes=Also remove volumes on Down?
+compose_run_button=Run
+
+maint_title=Maintenance
+maint_df=Disk usage
+maint_system_prune=System prune
+maint_builder_prune=Build cache prune
+maint_prune_all=Include all unused, not just dangling?
+maint_prune_volumes=Also prune volumes?
+
+sec_title=Security scanning
+sec_heading=Scan an image
+sec_noscanner=No image scanner is available. Install Docker Scout or Trivy to enable scanning.
+sec_using=Using scanner: $1
+sec_scan_button=Scan image
+
+reg_title=Registry
+reg_heading=Registry login
+reg_note=The password is sent to the Docker CLI through standard input and is never stored by this module. Docker keeps its own credential reference.
+reg_server=Server
+reg_server_hint=(blank for Docker Hub)
+reg_user=Username
+reg_pass=Password
+reg_login_button=Log in
+
+ctx_title=Docker contexts
+ctx_current=Current context: $1
+ctx_heading=Switch context
+ctx_select=Context
+ctx_active=(current)
+ctx_switch_button=Switch
+ctx_desc=Description
+ctx_endpoint=Endpoint
+
+widget_title=Docker
+widget_version=Server version
+widget_open=Open Docker
+widget_down=The Docker daemon is not reachable. $1
+
+confirm_cancel=Cancel
+confirm_remove=Permanently remove $1 selected container(s)?
+confirm_image_remove=Remove $1 selected image(s)?
+confirm_volume_remove=Remove $1 selected volume(s)?
+confirm_network_remove=Remove $1 selected network(s)?
+confirm_prune_images=Remove unused images? This cannot be undone.
+confirm_prune_volumes=Remove all unused volumes? This permanently deletes their data.
+confirm_prune_networks=Remove all unused networks?
+confirm_system_prune=Remove all stopped containers, unused networks, dangling images and build cache?
+confirm_system_prune_all=Remove all stopped containers, unused networks, ALL unused images and build cache?
+confirm_builder_prune=Remove the build cache?
+
+msg_action=Performed $1 on the selected containers
+msg_removed=Removed the selected items
+msg_created=Container created
+msg_cloned=Container cloned
+msg_renamed=Container renamed
+msg_updated=Container updated
+msg_copied=Copy complete
+msg_image_removed=Images removed
+msg_tagged=Image tagged
+msg_volume_created=Volume created
+msg_network_created=Network created
+msg_registry=Registry login complete
+msg_context=Context updated
+
+err_actionfailed=Failed to perform the requested action
+err_post=This action must be submitted as a POST request
+err_badref=Invalid or unknown container reference
+err_noperm=You are not permitted to perform this action
+err_noselection=No items were selected
+err_noaction=No action was chosen
+err_unknown=Unknown action
+
+acl_view=Can view containers and Docker information?
+acl_manage=Can start, stop, restart, pause and rename containers?
+acl_create=Can create containers and pull, build or tag images?
+acl_delete=Can remove containers, images, volumes and networks?
+acl_exec=Can run commands inside containers and copy files?
+acl_prune=Can prune images, volumes, networks and the system?
+acl_registry=Can log in to registries?
+acl_context=Can switch the Docker context?
+
+monitor_docker_up=Docker Up
+monitor_container_up=Docker Container Up
+monitor_container=Container
+monitor_unreachable=Docker daemon is not reachable
+monitor_badcontainer=A valid container name is required
+monitor_notfound=Container not found
+monitor_notype=Unknown monitor type
+
+select_all=Select all
+select_invert=Invert selection
+
+yes=Yes
+no=No
