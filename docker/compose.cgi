@@ -124,6 +124,9 @@ if (&can('manage')) {
 	print &ui_table_row($text{'compose_file'},
 		&ui_textbox("compose_file",
 			&html_escape($config{'compose_file'} || ""), 70));
+	print &ui_table_row($text{'compose_project_name'},
+		&ui_textbox("project_name", "", 30)."<br>".
+		&help_note($text{'compose_project_hint'}));
 	print &ui_table_row($text{'compose_action'},
 		&ui_select("action", "", [
 			[ "update", $text{'compose_update'} ],

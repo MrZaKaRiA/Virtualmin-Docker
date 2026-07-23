@@ -23,6 +23,7 @@ print "<li>".$text{'update_point1'}."</li>";
 print "<li>".$text{'update_point2'}."</li>";
 print "<li><b>".$text{'update_point3'}."</b></li>";
 print "<li>".&ui_text_color($text{'update_point4'}, 'warn')."</li>";
+print "<li>".&text('update_pinned', "<tt>".&html_escape($project)."</tt>")."</li>";
 print "</ul>";
 print &help_note($text{'update_note_restart'});
 

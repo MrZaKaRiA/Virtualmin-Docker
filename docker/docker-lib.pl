@@ -78,6 +78,13 @@ my ($v) = @_;
 return &is_valid_name($v) || &is_valid_id($v);
 }
 
+# Compose project names must be lowercase alphanumeric with _ and -.
+sub is_valid_project_name
+{
+my ($v) = @_;
+return defined($v) && $v =~ /^[a-z0-9][a-z0-9_\-]{0,62}$/;
+}
+
 # Image references: registry[:port]/namespace/repo[:tag][@sha256:...]
 sub is_valid_image
 {
@@ -849,6 +856,15 @@ return (1, "Compose file not found or not readable: $file") if (!-r $file);
 my ($kind, $sub) = &compose_prefix();
 return (1, "Docker Compose is not installed") if (!$kind);
 
+# Optional explicit project name - pinning it makes Docker act on that exact
+# existing stack (same containers and volumes) instead of re-deriving a name.
+my $pfx = '';
+if (defined($opts->{'project'}) && $opts->{'project'} ne '') {
+	&is_valid_project_name($opts->{'project'})
+		|| return (1, "Invalid project name (must be lowercase letters, digits, - or _)");
+	$pfx = '--project-name '.&sq($opts->{'project'}).' ';
+	}
+
 my $tail = '';
 $tail = ' up --detach' if ($action eq 'up');
 $tail = ' down' if ($action eq 'down');
@@ -863,13 +879,13 @@ $tail = ' config --quiet' if ($action eq 'config');
 
 if ($kind eq 'plugin') {
 	my ($failed, $out, $err) = &run_docker(
-		'compose --file '.&sq($file).$tail, undef, 0);
+		'compose '.$pfx.'--file '.&sq($file).$tail, undef, 0);
 	return ($failed, ($out || '').($err || ''));
 	}
 else {
 	# Legacy docker-compose binary (does not honour the module context flag).
 	my $bin = &has_command('docker-compose');
-	my $cmd = &sq($bin).' --file '.&sq($file).$tail;
+	my $cmd = &sq($bin).' '.$pfx.'--file '.&sq($file).$tail;
 	my ($out, $err);
 	my $status = &execute_command($cmd, undef, \$out, \$err, 0, 0);
 	return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
@@ -943,7 +959,13 @@ my ($pf, $p) = &find_compose_project($name);
 return (1, $p) if ($pf);
 my ($ff, $files) = &compose_project_files($p);
 return (1, $files) if ($ff);
-my $farg = join(' ', map { '--file '.&sq($_) } @$files);
+# ALWAYS pin the project name explicitly. Without --project-name, Docker
+# re-derives it from the file's name:/.env/directory - and if that changed
+# since the stack was created, "up" builds a SECOND stack with fresh empty
+# volumes instead of updating this one. Pinning to the name recorded by
+# "compose ls" guarantees the existing containers and volumes are reused.
+my $farg = '--project-name '.&sq($name).' '.
+	   join(' ', map { '--file '.&sq($_) } @$files);
 
 if ($action eq 'update') {
 	my ($f1, $o1, $e1) = &run_docker('compose '.$farg.' pull', undef, 0);

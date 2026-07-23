@@ -10,6 +10,15 @@ Made for non-technical users: every risky button now explains itself, and
 destructive actions show exactly what will be deleted before acting.
 
 ### Added
+- **Pinned project identity**: every project action passes an explicit
+  `--project-name` taken from `docker compose ls`, so Docker always upgrades
+  the *existing* stack in place — same containers, same volumes, same data —
+  even if `name:`, `COMPOSE_PROJECT_NAME` or the directory changed since the
+  stack was created. Without this, `up` silently builds a second stack with
+  empty volumes. The advanced form accepts an optional project name too.
+- **Old-copy detection**: warns on the dashboard and in red on the Update page
+  when a standalone container runs the same application as a Compose project
+  (old copy keeps the domain, port and data; the new project starts empty).
 - **Update action** for Compose projects — pulls the image versions set in
   `docker-compose.yml` / `.env` and recreates the containers (a plain restart
   never applies a new version). Available as one-click buttons on the Compose

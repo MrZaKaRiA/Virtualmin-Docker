@@ -363,18 +363,19 @@ elsif ($c eq 'compose') {
 		}
 	$config{'compose_file'} = $in{'compose_file'};
 	&save_module_config();
+	my %copts = ( 'volumes' => $in{'volumes'},
+		      'project' => $in{'project_name'} );
 	my ($f, $o);
 	if (($in{'action'} || '') eq 'update') {
 		# Update = pull the versions set in compose/.env, then recreate.
-		($f, $o) = &compose_run($in{'compose_file'}, 'pull');
+		($f, $o) = &compose_run($in{'compose_file'}, 'pull', \%copts);
 		if (!$f) {
-			my ($f2, $o2) = &compose_run($in{'compose_file'}, 'up');
+			my ($f2, $o2) = &compose_run($in{'compose_file'}, 'up', \%copts);
 			($f, $o) = ($f2, $o.$o2);
 			}
 		}
 	else {
-		($f, $o) = &compose_run($in{'compose_file'}, $in{'action'},
-			{ 'volumes' => $in{'volumes'} });
+		($f, $o) = &compose_run($in{'compose_file'}, $in{'action'}, \%copts);
 		}
 	&webmin_log("compose", "project", $in{'compose_file'},
 		{ 'action' => $in{'action'} }) if (!$f);

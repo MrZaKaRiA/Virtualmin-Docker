@@ -311,6 +311,8 @@ compose_noproject=No Compose projects were found on this system.
 compose_advanced=Advanced: run an action on a compose file by path
 compose_abs_hint=Enter the FULL path to the file, for example /home/user/domains/example.com/public_html/docker-compose.yml - a bare "docker-compose.yml" will not be found.
 compose_down_volumes_warn=DANGER: also deletes the project's volumes - databases and uploaded files are permanently lost!
+compose_project_name=Project name (optional)
+compose_project_hint=Leave empty to let Docker derive the name from the file/directory. Fill it in (lowercase) to target an EXACT existing stack - this guarantees Docker updates that stack in place, reusing its containers and volumes, instead of creating a second copy.
 compose_result=Compose: $1
 
 confirm_details=Exactly this will be affected:
@@ -330,6 +332,7 @@ update_point2=The project's containers are recreated with the new version
 update_point3=Named volumes (databases, uploads, settings) are NOT deleted - your data is kept
 update_point4=The application will be briefly offline while the containers restart
 update_note_restart=Why not just Restart? A restart keeps the old version - Docker only reads .env and docker-compose.yml when containers are (re)created, which is exactly what Update does.
+update_pinned=The module tells Docker the exact project name ($1), so this EXISTING stack is upgraded in place - same containers, same volumes, same data. No second copy can be created.
 update_files=Compose files
 update_containers=Containers in this project
 update_button=Update now
