@@ -58,6 +58,11 @@ if (!$cf2) {
 		}
 	}
 
+# Red flag if an old standalone copy of this application is running - updating
+# the project will NOT touch it, and it may still own the domain and the data.
+my $duphtml = &stale_duplicates_html($project);
+print &ui_alert_box($duphtml, 'danger') if ($duphtml ne '');
+
 if (&can('manage')) {
 	print &ui_form_start("act.cgi", "post");
 	print &ui_hidden("c", "compose_project");

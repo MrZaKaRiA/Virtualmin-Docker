@@ -357,6 +357,11 @@ maint_sysprune_vol_desc=DANGER: also deletes unused anonymous volumes. If a stop
 maint_builder_desc=Deletes Docker's build cache only. Safe: no containers, images in use, or data are affected - future image builds are just slower the first time.
 maint_confirm_note=Clicking a button above never deletes immediately - a red confirmation page listing exactly what will be removed always comes first.
 
+dup_heading=Possible old copy of an application detected
+dup_line=$1 (image $2, serving $3) is a standalone container, while Compose project $4 runs the same application. Visitors of the domain still see the OLD copy until it is removed and the website proxy port matches the new project's port.
+dup_nodomain=no proxied domain
+dup_data_note=IMPORTANT: each copy keeps its data in its OWN volumes - a newly created project starts with an EMPTY database. Before removing the old copy, make sure the new one really has your data (log in and check), or move it first with Backup / Restore under Storage.
+
 stor_remove_warn=Removing a volume PERMANENTLY deletes everything stored inside it (databases, uploads, settings). Make a backup below first.
 stor_prune_vol_note=Prune only removes unused ANONYMOUS volumes (the ones with long random names). Named project volumes are never touched by prune.
 

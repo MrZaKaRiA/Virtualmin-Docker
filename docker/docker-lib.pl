@@ -984,6 +984,82 @@ foreach my $p (@$projects) {
 return \%m;
 }
 
+# image_repo(IMAGE) - the repository part of an image ref (tag stripped),
+# undef for raw sha256 references.
+sub image_repo
+{
+my ($i) = @_;
+return undef if (!defined($i) || $i eq '' || $i =~ /^sha256:/);
+my $r = $i;
+$r =~ s/:[^:\/]+$//;
+return $r;
+}
+
+# find_stale_duplicates() -> listref of standalone containers that look like an
+# old copy of an application a Compose project also runs: running, NOT part of
+# any Compose project, same image repository as a project's container. This is
+# the classic "Update created a second stack" situation - the old copy keeps
+# the port, the domain and the data while the new project starts empty.
+sub find_stale_duplicates
+{
+my ($cf, $cont) = &list_containers();
+return [] if ($cf);
+my $pmap = &proxy_map();
+my @running = grep { $_->{'state'} eq 'running' } @$cont;
+
+my %repo_projects;
+foreach my $c (@running) {
+	my $proj = &container_project($c->{'labels'});
+	my $repo = &image_repo($c->{'image'});
+	next if (!$proj || !$repo);
+	$repo_projects{$repo}{$proj} = $c->{'image'};
+	}
+
+my @warn;
+foreach my $c (@running) {
+	next if (&container_project($c->{'labels'}));
+	my $repo = &image_repo($c->{'image'});
+	next if (!$repo || !$repo_projects{$repo});
+	my @doms = &container_proxied_domains($c->{'ports'}, $pmap);
+	my @projs = sort keys %{$repo_projects{$repo}};
+	push(@warn, {
+		'name'       => $c->{'name'},
+		'image'      => $c->{'image'},
+		'domains'    => \@doms,
+		'projects'   => \@projs,
+		'projimages' => { map { $_ => $repo_projects{$repo}{$_} } @projs },
+		});
+	}
+return \@warn;
+}
+
+# stale_duplicates_html([PROJECT]) - warning box content for detected old
+# copies, optionally limited to duplicates of one project. Empty string if none.
+sub stale_duplicates_html
+{
+my ($only_project) = @_;
+my $dups = &find_stale_duplicates();
+my @rows;
+foreach my $d (@$dups) {
+	my @projs = @{$d->{'projects'}};
+	@projs = grep { $_ eq $only_project } @projs if (defined($only_project));
+	next if (!@projs);
+	my $doms = @{$d->{'domains'}}
+		? join(", ", map { "<b>".&html_escape($_)."</b>" } @{$d->{'domains'}})
+		: $text{'dup_nodomain'};
+	my $plist = join(", ", map {
+		"<b>".&html_escape($_)."</b> (".&html_escape($d->{'projimages'}{$_}).")" } @projs);
+	push(@rows, &text('dup_line',
+		"<b>".&html_escape($d->{'name'})."</b>",
+		&html_escape($d->{'image'}),
+		$doms, $plist));
+	}
+return '' if (!@rows);
+return "<b>".$text{'dup_heading'}."</b><br>".
+	join("<br>", @rows)."<br>".
+	&ui_text_color($text{'dup_data_note'}, 'danger');
+}
+
 # ----------------------------------------------------------------------------
 # Prune previews - what exactly WOULD be deleted (for non-technical users)
 # ----------------------------------------------------------------------------

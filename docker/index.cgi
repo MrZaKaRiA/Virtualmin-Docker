@@ -79,6 +79,12 @@ print &ui_hr();
 # Container list with bulk actions
 # ---------------------------------------------------------------------------
 print &ui_subheading($text{'cont_heading'});
+
+# Warn when a standalone container looks like an old copy of a Compose app
+# (the "Update created a second stack" trap).
+my $duphtml = &stale_duplicates_html();
+print &ui_alert_box($duphtml, 'warn') if ($duphtml ne '');
+
 my ($cfail, $containers) = &list_containers();
 if ($cfail) {
 	print &ui_alert_box(&html_escape($containers), 'danger');
