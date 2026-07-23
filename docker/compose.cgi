@@ -21,6 +21,20 @@ if (!$kind) {
 
 print &help_note($text{'compose_intro'});
 
+# Inline read-only views (Logs / Status links) - GET is fine, nothing changes.
+if ($in{'show'} && $in{'project'} && &is_valid_name($in{'project'})) {
+	my $sa = ($in{'show'} eq 'ps') ? 'ps' : 'logs';
+	my ($sf, $so) = &compose_project_action($in{'project'}, $sa);
+	print &ui_subheading(($sa eq 'ps' ? $text{'compose_ps2'} : $text{'compose_logs2'}).
+		": ".&html_escape($in{'project'}));
+	if ($sf) { print &ui_alert_box(&html_escape($so), 'warn'); }
+	else {
+		print "<pre class='comment' style='max-height:400px;overflow:auto'>".
+			&html_escape($so eq '' ? $text{'exec_nooutput'} : $so)."</pre>";
+		}
+	print &ui_hr();
+	}
+
 # ---------------------------------------------------------------------------
 # Projects with one-click actions
 # ---------------------------------------------------------------------------
@@ -34,9 +48,19 @@ elsif (!@$projects) {
 	}
 else {
 	print &ui_subheading($text{'compose_projects'});
+	# Webmin-style column sizing: fixed-content columns shrink to fit
+	# (width:1% + nowrap), the Config files column takes all remaining width
+	# dynamically, and Actions sits flush at the right edge of the table.
+	my @tdt = (
+		"style='white-space:nowrap;width:1%;vertical-align:middle'",	# project
+		"style='white-space:nowrap;width:1%;vertical-align:middle'",	# domain
+		"style='white-space:nowrap;width:1%;vertical-align:middle'",	# status
+		"style='word-break:break-all;vertical-align:middle'",		# files (flexible)
+		"style='white-space:nowrap;width:1%;text-align:right;vertical-align:middle'", # actions
+		);
 	print &ui_columns_start([ $text{'compose_name'}, $text{'compose_domain'},
 		$text{'cont_status'}, $text{'compose_files'},
-		$text{'cont_actions'} ], 100);
+		$text{'cont_actions'} ], 100, 0, \@tdt);
 	foreach my $p (@$projects) {
 		my $name = $p->{'name'};
 		my $dom = $dmap->{$name};
@@ -46,9 +70,7 @@ else {
 					[ 'restart', $text{'compose_restart'} ],
 					[ 'stop',    $text{'compose_stop'} ],
 					[ 'start',   $text{'compose_start'} ],
-					[ 'logs',    $text{'compose_logs2'} ],
-					[ 'ps',      $text{'compose_ps2'} ],
-					[ 'down',    $text{'compose_down2'} ] ) {
+					[ 'down',    $text{'compose_down_btn'} ] ) {
 				$actions .= "<span style='display:inline-block;margin:1px'>".
 					&ui_form_start("act.cgi", "post").
 					&ui_hidden("c", "compose_project").
@@ -59,6 +81,12 @@ else {
 					"</span>";
 				}
 			}
+		# Read-only views as compact links instead of two more buttons.
+		$actions .= "<span style='display:inline-block;margin:1px 4px'>".
+			&ui_link("compose.cgi?show=logs&project=".&urlize($name),
+				$text{'compose_logs2'})." | ".
+			&ui_link("compose.cgi?show=ps&project=".&urlize($name),
+				$text{'compose_ps2'})."</span>";
 		print &ui_columns_row([
 			&html_escape($name),
 			$dom ? &ui_link("https://".&urlize($dom), &html_escape($dom), undef,
@@ -66,7 +94,7 @@ else {
 			&html_escape($p->{'status'}),
 			&html_escape($p->{'configfiles'}),
 			$actions,
-			]);
+			], \@tdt);
 		}
 	print &ui_columns_end();
 

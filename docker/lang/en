@@ -297,6 +297,7 @@ compose_start=Start
 compose_logs2=Logs
 compose_ps2=Status
 compose_down2=Down (remove containers)
+compose_down_btn=Down
 compose_pull=Pull images only
 compose_legend=What do these buttons do?
 compose_update_desc=Downloads the new version set in the project's compose/.env files and recreates its containers. Data stored in volumes (databases, uploads, settings) is kept. Use this after editing .env or docker-compose.yml.
