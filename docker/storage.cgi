@@ -51,6 +51,7 @@ else {
 	my @b;
 	push(@b, [ undef, $text{'stor_remove_volume'} ]) if (&can('delete'));
 	print &ui_form_end(\@b);
+	print &danger_note($text{'stor_remove_warn'}) if (&can('delete'));
 	}
 
 if (&can('create')) {
@@ -66,6 +67,7 @@ if (&can('prune')) {
 	print &ui_form_start("act.cgi", "post");
 	print &ui_hidden("c", "volume_prune");
 	print &ui_form_end([ [ undef, $text{'stor_prune_volumes'} ] ]);
+	print &help_note($text{'stor_prune_vol_note'});
 	}
 
 # Volume backup / restore (local volumes, via host tar).

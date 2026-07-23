@@ -833,14 +833,19 @@ return ('legacy', undef) if (&has_command('docker-compose'));
 return (undef, undef);
 }
 
-my %COMPOSE_ACTIONS = map { $_ => 1 } qw(up down ps logs config);
+my %COMPOSE_ACTIONS = map { $_ => 1 } qw(up down stop start restart pull ps logs config);
 sub compose_run
 {
 my ($file, $action, $opts) = @_;
 $opts ||= {};
 return (1, "Action not allowed") if (!$COMPOSE_ACTIONS{$action});
 return (1, "Compose file is required") if (!&is_clean_token($file));
-return (1, "Compose file not found") if (!-r $file);
+# A relative path would be resolved against the module directory, never the
+# project - insist on a full path so the error is understandable.
+return (1, "The compose file must be a FULL path starting with /, for example ".
+	   "/home/user/domains/example.com/public_html/docker-compose.yml")
+	if ($file !~ m!^/!);
+return (1, "Compose file not found or not readable: $file") if (!-r $file);
 my ($kind, $sub) = &compose_prefix();
 return (1, "Docker Compose is not installed") if (!$kind);
 
@@ -848,6 +853,10 @@ my $tail = '';
 $tail = ' up --detach' if ($action eq 'up');
 $tail = ' down' if ($action eq 'down');
 $tail .= ' --volumes' if ($action eq 'down' && $opts->{'volumes'});
+$tail = ' stop' if ($action eq 'stop');
+$tail = ' start' if ($action eq 'start');
+$tail = ' restart' if ($action eq 'restart');
+$tail = ' pull' if ($action eq 'pull');
 $tail = ' ps' if ($action eq 'ps');
 $tail = ' logs --no-color --tail 200' if ($action eq 'logs');
 $tail = ' config --quiet' if ($action eq 'config');
@@ -886,6 +895,279 @@ foreach my $p (@$data) {
 		});
 	}
 return (0, \@out);
+}
+
+# container_project(LABELS) - the Compose project a container belongs to, from
+# its "com.docker.compose.project=NAME" label (undef when not compose-managed).
+sub container_project
+{
+my ($labels) = @_;
+return (defined($labels) && $labels =~ /com\.docker\.compose\.project=([^,]+)/) ? $1 : undef;
+}
+
+# find_compose_project(NAME) -> ($failed, \%project) from compose_ls.
+sub find_compose_project
+{
+my ($name) = @_;
+return (1, "Invalid project name") if (!&is_valid_name($name));
+my ($lf, $projects) = &compose_ls();
+return (1, $projects) if ($lf);
+my ($p) = grep { $_->{'name'} eq $name } @$projects;
+return (1, "Unknown Compose project: $name") if (!$p);
+return (0, $p);
+}
+
+# compose_project_files(\%project) -> ($failed, \@files) validated absolute paths.
+sub compose_project_files
+{
+my ($p) = @_;
+my @files = grep { $_ ne '' } split(/\s*,\s*/, $p->{'configfiles'} || '');
+return (1, "The project has no compose file recorded") if (!@files);
+foreach my $f (@files) {
+	return (1, "Compose file not found or not readable: $f")
+		if (!&is_clean_token($f) || $f !~ m!^/! || !-r $f);
+	}
+return (0, \@files);
+}
+
+# compose_project_action(NAME, ACTION) - run a whitelisted compose action against
+# a project found via "compose ls", using its own recorded config files. The
+# special action "update" runs pull + up -d, which applies new image versions
+# from the compose/.env files and recreates containers (volumes are preserved).
+my %PROJECT_ACTIONS = map { $_ => 1 } qw(update up down stop start restart pull ps logs);
+sub compose_project_action
+{
+my ($name, $action) = @_;
+return (1, "Action not allowed") if (!$PROJECT_ACTIONS{$action});
+my ($pf, $p) = &find_compose_project($name);
+return (1, $p) if ($pf);
+my ($ff, $files) = &compose_project_files($p);
+return (1, $files) if ($ff);
+my $farg = join(' ', map { '--file '.&sq($_) } @$files);
+
+if ($action eq 'update') {
+	my ($f1, $o1, $e1) = &run_docker('compose '.$farg.' pull', undef, 0);
+	my $out1 = ($o1 || '').($e1 || '');
+	return (1, $out1) if ($f1);
+	my ($f2, $o2, $e2) = &run_docker('compose '.$farg.' up --detach', undef, 0);
+	return ($f2, $out1.($o2 || '').($e2 || ''));
+	}
+my %tails = ( 'up' => ' up --detach', 'down' => ' down', 'stop' => ' stop',
+	      'start' => ' start', 'restart' => ' restart', 'pull' => ' pull',
+	      'ps' => ' ps', 'logs' => ' logs --no-color --tail 200' );
+my ($f2, $o2, $e2) = &run_docker('compose '.$farg.$tails{$action}, undef, 0);
+return ($f2, ($o2 || '').($e2 || ''));
+}
+
+# domain_for_compose_path(PATH) - the Virtualmin domain a compose file lives
+# under, from the standard /home/<user>/domains/<domain>/... layout.
+sub domain_for_compose_path
+{
+my ($p) = @_;
+return ($p =~ m!/domains/([^/]+)/!) ? $1 : undef;
+}
+
+# compose_domain_map() -> hashref { project => domain } for projects whose
+# compose file sits inside a Virtualmin domain directory.
+sub compose_domain_map
+{
+my %m;
+my ($lf, $projects) = &compose_ls();
+return \%m if ($lf);
+foreach my $p (@$projects) {
+	my $d;
+	foreach my $cf (split(/\s*,\s*/, $p->{'configfiles'} || '')) {
+		$d ||= &domain_for_compose_path($cf);
+		}
+	$m{$p->{'name'}} = $d if ($d);
+	}
+return \%m;
+}
+
+# ----------------------------------------------------------------------------
+# Prune previews - what exactly WOULD be deleted (for non-technical users)
+# ----------------------------------------------------------------------------
+
+# is_db_image(IMAGE) - does this look like a database/data-store image?
+sub is_db_image
+{
+my ($i) = @_;
+return (defined($i) && $i =~ /postgres|mysql|mariadb|mongo|redis|memcached|elastic|clickhouse|cassandra|couch|influx/i) ? 1 : 0;
+}
+
+# preview_prune_containers() -> stopped/created/dead containers that a system
+# prune would delete, each tagged with db/domain/project info.
+sub preview_prune_containers
+{
+my ($f, $list) = &list_containers();
+return [] if ($f);
+my $dm = &compose_domain_map();
+my @out;
+foreach my $c (@$list) {
+	next if ($c->{'state'} eq 'running' || $c->{'state'} eq 'paused');
+	my $proj = &container_project($c->{'labels'});
+	push(@out, {
+		'name'    => $c->{'name'},
+		'image'   => $c->{'image'},
+		'state'   => $c->{'state'},
+		'db'      => &is_db_image($c->{'image'}),
+		'project' => $proj,
+		'domain'  => $proj ? $dm->{$proj} : undef,
+		});
+	}
+return \@out;
+}
+
+# preview_unused_volumes() -> volumes not attached to any container. Note that
+# "volume prune" only deletes ANONYMOUS unused volumes on modern Docker; named
+# ones are kept (flagged so the UI can say so honestly).
+sub preview_unused_volumes
+{
+my ($f, $rows) = &docker_json_lines('volume ls --filter dangling=true --format "{{json .}}"');
+return [] if ($f);
+my $dm = &compose_domain_map();
+my @out;
+foreach my $r (@$rows) {
+	my $n = $r->{'Name'};
+	next if (!defined($n) || $n eq '');
+	my ($proj) = $n =~ /^([A-Za-z0-9]+)[_-]/;
+	push(@out, {
+		'name'    => $n,
+		'anon'    => ($n =~ /^[0-9a-f]{64}$/ ? 1 : 0),
+		'db'      => ($n =~ /db|data|postgres|mysql|mongo|redis/i ? 1 : 0),
+		'project' => $proj,
+		'domain'  => $proj ? $dm->{$proj} : undef,
+		});
+	}
+return \@out;
+}
+
+# preview_dangling_images() -> untagged leftover image layers.
+sub preview_dangling_images
+{
+my ($f, $rows) = &docker_json_lines('image ls --filter dangling=true --format "{{json .}}"');
+return [] if ($f);
+my @out;
+foreach my $r (@$rows) {
+	push(@out, { 'name' => ($r->{'Repository'} && $r->{'Repository'} ne '<none>')
+			? $r->{'Repository'}.':'.($r->{'Tag'} || '?') : ($r->{'ID'} || '?'),
+		     'size' => $r->{'Size'} });
+	}
+return \@out;
+}
+
+# preview_unused_images() -> images no container (running or stopped) uses.
+# Best-effort match by name - shown as an estimate in the UI.
+sub preview_unused_images
+{
+my ($cf, $cont) = &list_containers();
+my %used;
+if (!$cf) { $used{$_->{'image'}} = 1 foreach (@$cont); }
+my ($if, $imgs) = &list_images();
+return [] if ($if);
+return [ grep { !$used{$_->{'name'}} } @$imgs ];
+}
+
+# prune_preview_html(\%opts) - a red-flagged HTML listing of exactly what a
+# prune would delete. opts: containers, volumes, dangling, allimages.
+sub prune_preview_html
+{
+my ($opts) = @_;
+my $h = '';
+my $any = 0;
+
+if ($opts->{'containers'}) {
+	my $c = &preview_prune_containers();
+	$h .= &ui_subheading($text{'maint_preview_containers'});
+	if (@$c) {
+		$any = 1;
+		$h .= &ui_columns_start([ $text{'cont_name'}, $text{'cont_image'},
+			$text{'cont_status'}, '' ], 100);
+		foreach my $x (@$c) {
+			$h .= &ui_columns_row([
+				&html_escape($x->{'name'}),
+				&html_escape($x->{'image'}),
+				&html_escape($x->{'state'}),
+				&preview_tags($x),
+				]);
+			}
+		$h .= &ui_columns_end();
+		}
+	else { $h .= "<p>".$text{'maint_none_containers'}."</p>"; }
+	}
+
+if ($opts->{'volumes'}) {
+	my $v = &preview_unused_volumes();
+	$h .= &ui_subheading($text{'maint_preview_volumes'});
+	if (@$v) {
+		$any = 1;
+		$h .= &ui_columns_start([ $text{'stor_name'}, '', '' ], 100);
+		foreach my $x (@$v) {
+			my $fate = $x->{'anon'}
+				? &ui_text_color($text{'maint_tag_anon'}, 'danger')
+				: &ui_text_color($text{'maint_tag_named'}, 'warn');
+			$h .= &ui_columns_row([ &html_escape($x->{'name'}), $fate,
+						&preview_tags($x) ]);
+			}
+		$h .= &ui_columns_end();
+		}
+	else { $h .= "<p>".$text{'maint_none_volumes'}."</p>"; }
+	}
+
+if ($opts->{'dangling'}) {
+	my $d = &preview_dangling_images();
+	$h .= &ui_subheading($text{'maint_preview_dangling'});
+	if (@$d) {
+		$any = 1;
+		$h .= &ui_columns_start([ $text{'img_name'}, $text{'img_size'} ], 100);
+		$h .= &ui_columns_row([ &html_escape($_->{'name'}), &html_escape($_->{'size'}) ])
+			foreach (@$d);
+		$h .= &ui_columns_end();
+		}
+	else { $h .= "<p>".$text{'maint_none_dangling'}."</p>"; }
+	}
+
+if ($opts->{'allimages'}) {
+	my $u = &preview_unused_images();
+	$h .= &ui_subheading($text{'maint_preview_unused_images'});
+	if (@$u) {
+		$any = 1;
+		$h .= &ui_columns_start([ $text{'img_name'}, $text{'img_size'} ], 100);
+		$h .= &ui_columns_row([ &html_escape($_->{'name'}), &html_escape($_->{'size'}) ])
+			foreach (@$u);
+		$h .= &ui_columns_end();
+		}
+	else { $h .= "<p>".$text{'maint_none_unused'}."</p>"; }
+	}
+
+$h = "<p>".$text{'maint_nothing'}."</p>" if (!$any && $h eq '');
+return $h;
+}
+
+# preview_tags(\%item) - red DATABASE / domain tags for a preview row.
+sub preview_tags
+{
+my ($x) = @_;
+my @tags;
+push(@tags, &ui_text_color("&#9888; ".$text{'maint_tag_db'}, 'danger')) if ($x->{'db'});
+push(@tags, &ui_text_color(&text('maint_tag_domain', &html_escape($x->{'domain'})), 'danger'))
+	if ($x->{'domain'});
+push(@tags, &html_escape($x->{'project'})) if ($x->{'project'} && !$x->{'domain'});
+return join(" &nbsp; ", @tags);
+}
+
+# help_note(TEXT) - a muted plain-language description line for forms/buttons.
+sub help_note
+{
+my ($t) = @_;
+return "<div style='opacity:.75;font-size:92%;margin:2px 0 10px 0'>".$t."</div>";
+}
+
+# danger_note(TEXT) - a red warning line.
+sub danger_note
+{
+my ($t) = @_;
+return "<div style='margin:2px 0 10px 0'>".&ui_text_color($t, 'danger')."</div>";
 }
 
 # ----------------------------------------------------------------------------

@@ -97,6 +97,11 @@ else {
 	# Map of host port -> Virtualmin domain(s) proxying to it (empty off Virtualmin).
 	my $pmap = &proxy_map();
 
+	# Compose projects known to this host, for per-container Update links.
+	my %cproj;
+	my ($plf, $plist) = &compose_ls();
+	if (!$plf) { $cproj{$_->{'name'}} = 1 foreach (@$plist); }
+
 	print &ui_form_start("act.cgi", "post", undef, "id='contform'");
 	print &ui_hidden("c", "container_bulk");
 	print &bulk_select_links('contform', 'd')."<br>\n";
@@ -109,10 +114,18 @@ else {
 		my @doms = &container_proxied_domains($c->{'ports'}, $pmap);
 		my $domhtml = @doms ? join("<br>", map {
 			&ui_link("http://".$_, &html_escape($_), undef, "target=_blank") } @doms) : "";
-		my $links = join(" | ",
+		my @acts = (
 			&ui_link("container.cgi?tab=log&id=".&urlize($c->{'id'}), $text{'cont_logs'}),
 			&ui_link("container.cgi?tab=inspect&id=".&urlize($c->{'id'}), $text{'cont_inspect'}),
 			&ui_link("container.cgi?tab=exec&id=".&urlize($c->{'id'}), $text{'cont_exec'}));
+		# Offer Update for compose-managed containers - the way to actually
+		# apply a new version from the compose/.env files.
+		my $proj = &container_project($c->{'labels'});
+		if ($proj && $cproj{$proj} && &can('manage')) {
+			push(@acts, "<b>".&ui_link("update.cgi?project=".&urlize($proj),
+				$text{'cont_update'})."</b>");
+			}
+		my $links = join(" | ", @acts);
 		print &ui_checked_columns_row([
 			&ui_link("container.cgi?id=".&urlize($c->{'id'}), &html_escape($c->{'name'})),
 			&state_label($c->{'state'}, $c->{'status'}),
@@ -140,6 +153,7 @@ else {
 		push(@buttons, [ "remove", $text{'act_remove'} ]);
 		}
 	print &ui_form_end(\@buttons);
+	print &help_note($text{'cont_help'});
 	}
 
 # ---------------------------------------------------------------------------

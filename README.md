@@ -10,7 +10,7 @@ with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 [![Webmin module](https://img.shields.io/badge/Webmin-module-FF6600.svg)](https://webmin.com)
 [![Virtualmin](https://img.shields.io/badge/Virtualmin-integrated-2E7D32.svg)](https://virtualmin.com)
-[![Version](https://img.shields.io/badge/version-1.2.0-success.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-success.svg)](CHANGELOG.md)
 [![Hardened](https://img.shields.io/badge/shell--injection-hardened-brightgreen.svg)](#-security-model)
 
 </div>
@@ -35,6 +35,11 @@ management that fits right in — under **Servers → Docker**.
 - 🧰 **Everything you actually do** — full lifecycle, bulk actions, images, Compose, storage, backups, scanning.
 - 👥 **Granular access control** — grant or deny each capability per Webmin user.
 - 📝 **Audited** — every change is written to the Webmin Actions Log.
+- 🧑‍🏫 **Friendly to non-technical users** — every risky button explains itself in
+  plain words, and destructive actions show a red list of exactly what will be
+  deleted before anything happens.
+- ⬆️ **Real updates** — a dedicated Update action applies new versions from
+  `.env` / `docker-compose.yml` (a restart alone never does).
 
 ## 📸 Screenshots
 
@@ -70,7 +75,10 @@ management that fits right in — under **Servers → Docker**.
 </td><td valign="top" width="50%">
 
 **Compose**
-- List projects + up / down / status / logs / validate (v2, with v1 fallback)
+- One-click per-project actions — **Update (pull & recreate)**, restart, stop,
+  start, logs, status, down — using each project's own compose file (no path typing)
+- Projects show the Virtualmin domain they belong to
+- Advanced: run any action against a compose file by full path
 
 **Storage**
 - Volumes & networks: list · inspect · create · remove · prune
@@ -81,7 +89,9 @@ management that fits right in — under **Servers → Docker**.
 - Volumes: back up & restore a local volume as `.tar.gz`
 
 **Maintenance**
-- `system prune` & `builder prune`, each with a confirmation
+- `system prune` & `builder prune` with **red deletion previews** — see exactly
+  which containers, volumes and images would be removed, tagged **DATABASE**
+  and **belongs to domain X**, before you confirm
 
 **Security**
 - Image scanning via **Docker Scout** or **Trivy**
@@ -177,6 +187,7 @@ the context override in the module's **Contexts** page.
 | `container.cgi` | Per-container logs / inspect / exec / stats / manage / backup |
 | `images · compose · storage · maintenance · security · registry · contexts .cgi` | Section pages |
 | `act.cgi` | The single POST action dispatcher (ACL-gated, audited) |
+| `update.cgi` | Plain-language "update this Compose project" page |
 | `system_info.pl` | Home-screen dashboard widget |
 | `status_monitor.pl` | Monitor types for System and Server Status |
 | `acl_security.pl` · `defaultacl` | Per-user access control |

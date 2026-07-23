@@ -47,12 +47,17 @@ exit;
 }
 
 # Show a confirmation form that re-posts to act.cgi with confirmed=1.
+# $detail is optional, pre-escaped HTML listing exactly what will happen.
 sub confirm
 {
-my ($title, $prompt, $hidden, $button, $level) = @_;
+my ($title, $prompt, $hidden, $button, $level, $detail) = @_;
 return if ($in{'confirmed'} || !$config{'confirm_destructive'});
 &ui_print_header(undef, $title, "");
 print &ui_alert_box(&html_escape($prompt), $level || 'warn');
+if (defined($detail) && $detail ne '') {
+	print &ui_subheading($text{'confirm_details'});
+	print $detail;
+	}
 print &ui_form_start("act.cgi", "post");
 # $hidden is a FLAT list of (name, value, name, value, ...) pairs.
 for (my $i = 0; $i + 1 < scalar(@$hidden); $i += 2) {
@@ -213,7 +218,8 @@ elsif ($c eq 'build') {
 elsif ($c eq 'prune_images') {
 	&require_acl('prune');
 	&confirm($text{'img_prune'}, $text{'confirm_prune_images'},
-		[ ("c", "prune_images"), ("all", $in{'all'}) ], $text{'img_prune'}, 'danger');
+		[ ("c", "prune_images"), ("all", $in{'all'}) ], $text{'img_prune'}, 'danger',
+		&prune_preview_html({ 'dangling' => 1, 'allimages' => $in{'all'} }));
 	my ($f, $o) = &prune_images($in{'all'});
 	&webmin_log("prune", "image", "*") if (!$f);
 	&render($text{'img_prune'}, $o);
@@ -285,7 +291,8 @@ elsif ($c eq 'volume_remove') {
 elsif ($c eq 'volume_prune') {
 	&require_acl('prune');
 	&confirm($text{'stor_prune_volumes'}, $text{'confirm_prune_volumes'},
-		[ ("c", "volume_prune") ], $text{'stor_prune_volumes'}, 'danger');
+		[ ("c", "volume_prune") ], $text{'stor_prune_volumes'}, 'danger',
+		&prune_preview_html({ 'volumes' => 1 }));
 	my ($f, $o) = &prune_volumes();
 	&webmin_log("prune", "volume", "*") if (!$f);
 	&render($text{'stor_prune_volumes'}, $o);
@@ -323,7 +330,10 @@ elsif ($c eq 'system_prune') {
 	&confirm($text{'maint_system_prune'},
 		$in{'all'} ? $text{'confirm_system_prune_all'} : $text{'confirm_system_prune'},
 		[ ("c", "system_prune"), ("all", $in{'all'}), ("volumes", $in{'volumes'}) ],
-		$text{'maint_system_prune'}, 'danger');
+		$text{'maint_system_prune'}, 'danger',
+		&prune_preview_html({ 'containers' => 1, 'dangling' => 1,
+				      'allimages' => $in{'all'},
+				      'volumes' => $in{'volumes'} }));
 	my ($f, $o) = &system_prune($in{'all'}, $in{'volumes'});
 	&webmin_log("prune", "system", "*",
 		{ 'all' => $in{'all'}, 'volumes' => $in{'volumes'} }) if (!$f);
@@ -343,13 +353,69 @@ elsif ($c eq 'builder_prune') {
 
 elsif ($c eq 'compose') {
 	&require_acl('manage');
+	if (($in{'action'} || '') eq 'down') {
+		&confirm($text{'compose_down2'},
+			$in{'volumes'} ? $text{'confirm_compose_down_vol'}
+				       : &text('confirm_compose_down', $in{'compose_file'}),
+			[ ("c", "compose"), ("compose_file", $in{'compose_file'}),
+			  ("action", "down"), ("volumes", $in{'volumes'}) ],
+			$text{'compose_down2'}, 'danger');
+		}
 	$config{'compose_file'} = $in{'compose_file'};
 	&save_module_config();
-	my ($f, $o) = &compose_run($in{'compose_file'}, $in{'action'},
-		{ 'volumes' => $in{'volumes'} });
+	my ($f, $o);
+	if (($in{'action'} || '') eq 'update') {
+		# Update = pull the versions set in compose/.env, then recreate.
+		($f, $o) = &compose_run($in{'compose_file'}, 'pull');
+		if (!$f) {
+			my ($f2, $o2) = &compose_run($in{'compose_file'}, 'up');
+			($f, $o) = ($f2, $o.$o2);
+			}
+		}
+	else {
+		($f, $o) = &compose_run($in{'compose_file'}, $in{'action'},
+			{ 'volumes' => $in{'volumes'} });
+		}
 	&webmin_log("compose", "project", $in{'compose_file'},
 		{ 'action' => $in{'action'} }) if (!$f);
 	&render($text{'compose_heading'}, $o eq '' ? $text{'exec_nooutput'} : $o);
+	}
+elsif ($c eq 'compose_project') {
+	&require_acl('manage');
+	my $project = $in{'project'};
+	my $paction = $in{'paction'} || '';
+	&is_valid_name($project) || &error($text{'update_err_noproject'});
+
+	# Plain-language confirmations for actions that affect availability/data.
+	if ($paction eq 'update') {
+		&confirm(&text('confirm_compose_update', $project),
+			&text('confirm_compose_update_desc', $project),
+			[ ("c", "compose_project"), ("project", $project),
+			  ("paction", "update") ],
+			$text{'compose_update'}, 'info');
+		}
+	elsif ($paction eq 'stop') {
+		&confirm(&text('confirm_compose_stop_title', $project),
+			&text('confirm_compose_stop', $project),
+			[ ("c", "compose_project"), ("project", $project),
+			  ("paction", "stop") ],
+			$text{'compose_stop'}, 'warn');
+		}
+	elsif ($paction eq 'down') {
+		&confirm(&text('confirm_compose_down_title', $project),
+			&text('confirm_compose_down', $project),
+			[ ("c", "compose_project"), ("project", $project),
+			  ("paction", "down") ],
+			$text{'compose_down2'}, 'danger');
+		}
+	my ($f, $o) = &compose_project_action($project, $paction);
+	&webmin_log($paction, "compose", $project) if (!$f);
+	if ($f) {
+		&redir("compose.cgi", undef,
+			length($o) > 500 ? substr($o, 0, 500)."..." : $o);
+		}
+	&render(&text('compose_result', $project),
+		$o eq '' ? $text{'exec_nooutput'} : $o);
 	}
 
 # ---- security --------------------------------------------------------------

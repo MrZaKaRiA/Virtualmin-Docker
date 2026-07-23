@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-06-23
+
+Made for non-technical users: every risky button now explains itself, and
+destructive actions show exactly what will be deleted before acting.
+
+### Added
+- **Update action** for Compose projects — pulls the image versions set in
+  `docker-compose.yml` / `.env` and recreates the containers (a plain restart
+  never applies a new version). Available as one-click buttons on the Compose
+  page, a bold **Update** link on every compose-managed container, and a
+  dedicated explanation page (`update.cgi`) describing what will happen.
+- **One-click per-project Compose actions** (Update / Restart / Stop / Start /
+  Logs / Status / Down) using each project's own recorded compose file — no
+  path typing. Projects show the Virtualmin domain they belong to.
+- **Deletion previews**: Maintenance now shows live, red-tagged lists of
+  exactly what a prune would delete — stopped containers, unused volumes,
+  leftover images — flagged **DATABASE** and **belongs to domain X** where
+  detected. The same listing appears on every confirmation page.
+- Plain-language help notes throughout: container actions, Compose button
+  legend, prune descriptions, volume-removal warnings.
+
+### Fixed
+- **"Compose file not found"** when using the default relative
+  `docker-compose.yml` path — relative paths were resolved against the module
+  directory. The manual form now requires a full path with a clear message,
+  and the per-project buttons remove the need to type paths at all.
+- Manual Compose **Down** now asks for confirmation (red warning when
+  volume removal is selected).
+
 ## [1.2.0] - 2026-06-23
 
 ### Added
