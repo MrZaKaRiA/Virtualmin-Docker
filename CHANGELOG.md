@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-07-23
+
+### Fixed
+- Proxy reconnect ("Fix now" / manual URL) failing silently. The write path now
+  chooses `modify-proxy` vs `create-proxy` correctly (they are mutually
+  exclusive — modify needs an existing balancer, create refuses if one exists),
+  falls back to the other if the first fails, and **always shows the exact
+  `virtualmin` command output** on a result page instead of a redirect that
+  could swallow the error. Broadened the `virtualmin` binary lookup
+  (/usr/sbin, /usr/bin, /usr/local/*). Added a read-only **diagnose** link per
+  domain showing what `list-proxies` and the domain config report.
+
 ## [1.4.1] - 2026-07-23
 
 ### Changed

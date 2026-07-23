@@ -432,8 +432,10 @@ elsif ($c eq 'set_proxy') {
 		}
 	my ($f, $o) = &set_domain_proxy($in{'domain'}, $url);
 	&webmin_log("proxy", "domain", $in{'domain'}, { 'url' => $url }) if (!$f);
-	&redir("proxy.cgi", $f ? undef : &text('proxy_done', &html_escape($in{'domain'})),
-		$f ? $o : undef);
+	# Always show what actually happened - proxy changes fail silently too easily.
+	my $head = $f ? &text('proxy_fail', &html_escape($in{'domain'}))
+		      : &text('proxy_done', &html_escape($in{'domain'}));
+	&render($text{'proxy_title'}, $head."\n\n".$o);
 	}
 elsif ($c eq 'connect_domain') {
 	# Repoint a domain at THIS container's published port (from container page).
@@ -442,9 +444,9 @@ elsif ($c eq 'connect_domain') {
 	$in{'port'} =~ /^\d{1,5}$/ || &error($text{'proxy_err_port'});
 	my ($f, $o) = &set_domain_proxy($in{'domain'}, "http://localhost:".$in{'port'}."/");
 	&webmin_log("proxy", "domain", $in{'domain'}, { 'port' => $in{'port'} }) if (!$f);
-	&redir("container.cgi?tab=manage&id=".&urlize($in{'id'}),
-		$f ? undef : &text('proxy_done', &html_escape($in{'domain'})),
-		$f ? $o : undef);
+	my $head = $f ? &text('proxy_fail', &html_escape($in{'domain'}))
+		      : &text('proxy_done', &html_escape($in{'domain'}));
+	&render($text{'proxy_title'}, $head."\n\n".$o);
 	}
 
 # ---- networks (connect / disconnect a container) ---------------------------

@@ -1566,7 +1566,10 @@ sub virtualmin_bin
 {
 my $p = &has_command('virtualmin');
 return $p if ($p);
-return "/usr/sbin/virtualmin" if (-x "/usr/sbin/virtualmin");
+foreach my $c ("/usr/sbin/virtualmin", "/usr/bin/virtualmin",
+	       "/usr/local/sbin/virtualmin", "/usr/local/bin/virtualmin") {
+	return $c if (-x $c);
+	}
 return undef;
 }
 
@@ -1583,7 +1586,26 @@ my $status = &execute_command(&sq($bin)." ".$argstr, undef, \$out, \$err, 0, 0);
 return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
 }
 
+# domain_proxy_paths(DOMAIN) -> list of existing proxy paths (via --name-only,
+# the most reliably parseable output). Empty list on any error.
+sub domain_proxy_paths
+{
+my ($domain) = @_;
+return () if (!&is_valid_domain($domain));
+my $bin = &virtualmin_bin();
+return () if (!$bin);
+my ($out, $err);
+my $status = &execute_command(
+	&sq($bin)." list-proxies --domain ".&sq($domain)." --name-only",
+	undef, \$out, \$err, 0, 1);
+return () if ($status != 0);
+return grep { /^\S/ } map { my $x = $_; $x =~ s/\s+$//; $x }
+	split(/\r?\n/, defined($out) ? $out : "");
+}
+
 # list_domain_proxies(DOMAIN) -> ($failed, \@proxies) each { path, url, proxying }
+# Parses "list-proxies --multiline". Format: a path on its own line, then
+# indented "    URL: ..." / "    Proxying: ..." lines beneath it.
 sub list_domain_proxies
 {
 my ($domain) = @_;
@@ -1594,48 +1616,55 @@ my ($out, $err);
 my $status = &execute_command(
 	&sq($bin)." list-proxies --domain ".&sq($domain)." --multiline",
 	undef, \$out, \$err, 0, 1);
-return (1, $err || $out) if ($status != 0);
+return (1, $err || $out || "list-proxies failed") if ($status != 0);
 my @proxies;
 my $cur;
 foreach my $line (split(/\r?\n/, $out)) {
-	if ($line =~ /^(\S.*)$/ && $line !~ /^\s/) {
-		# A path line: the proxy path is the first token / heading.
-		push(@proxies, $cur) if ($cur && $cur->{'path'});
+	if ($line =~ /^(\/\S*)\s*$/) {           # a proxy path line, e.g. "/"
+		push(@proxies, $cur) if ($cur);
 		$cur = { 'path' => $1 };
-		$cur->{'path'} =~ s/\s+$//;
 		}
-	elsif ($line =~ /^\s+URL:\s*(.*)$/) { $cur->{'url'} = $1; }
-	elsif ($line =~ /^\s+Proxying:\s*(.*)$/) { $cur->{'proxying'} = $1; }
+	elsif ($line =~ /^\s+URL:\s*(.*)$/) { $cur->{'url'} = $1 if ($cur); }
+	elsif ($line =~ /^\s+Proxying:\s*(.*)$/) { $cur->{'proxying'} = $1 if ($cur); }
 	}
-push(@proxies, $cur) if ($cur && $cur->{'path'});
+push(@proxies, $cur) if ($cur);
 return (0, \@proxies);
 }
 
-# set_domain_proxy(DOMAIN, URL) - point a domain's website proxy at URL. Reuses
-# the existing proxy path if there is one, otherwise creates one at "/".
+# set_domain_proxy(DOMAIN, URL) -> ($failed, $transcript). Points a domain's
+# website proxy at URL. Uses modify-proxy when a balancer exists at the chosen
+# path, create-proxy when it does not, and falls back to the other command if
+# the first fails. Returns a full transcript so the result is always visible.
 sub set_domain_proxy
 {
 my ($domain, $url) = @_;
 return (1, "Invalid domain") if (!&is_valid_domain($domain));
 return (1, "Invalid proxy URL") if (!&is_valid_proxy_url($url));
 my $bin = &virtualmin_bin();
-return (1, "Virtualmin is not installed") if (!$bin);
+return (1, "Virtualmin was not found. Install it or check /usr/sbin/virtualmin.") if (!$bin);
 
-# Find the existing proxy path (the "Website Proxy Settings" feature uses "/").
-my ($lf, $proxies) = &list_domain_proxies($domain);
-my $path = '/';
-if (!$lf && ref($proxies) eq 'ARRAY' && @$proxies) {
-	my ($root) = grep { $_->{'path'} eq '/' } @$proxies;
-	$path = $root ? '/' : $proxies->[0]->{'path'};
+my @paths = &domain_proxy_paths($domain);
+my $path = (grep { $_ eq '/' } @paths) ? '/' : ($paths[0] || '/');
+my $exists = (grep { $_ eq $path } @paths) ? 1 : 0;
+my $first = $exists ? 'modify' : 'create';
+my $second = $exists ? 'create' : 'modify';
+
+my $tx = "Existing proxy paths: ".(@paths ? join(", ", @paths) : "(none)")."\n";
+my $run = sub {
+	my ($verb) = @_;
+	$tx .= "\n\$ virtualmin $verb-proxy --domain $domain --path $path --url $url\n";
+	my ($f, $o) = &run_virtualmin("$verb-proxy --domain ".&sq($domain).
+		" --path ".&sq($path)." --url ".&sq($url));
+	$tx .= ($o eq '' ? "(no output)\n" : $o.($o =~ /\n$/ ? "" : "\n"));
+	return $f;
+	};
+
+my $f = &$run->($first);
+if ($f) {
+	# The first verb was wrong for the current state - try the other one.
+	$f = &$run->($second);
 	}
-# Try to modify the existing proxy; if that fails (e.g. none exists yet),
-# create one at the site root. This tolerates output-format differences.
-my ($f, $o) = &run_virtualmin("modify-proxy --domain ".&sq($domain).
-	" --path ".&sq($path)." --url ".&sq($url));
-return (0, $o) if (!$f);
-my ($f2, $o2) = &run_virtualmin("create-proxy --domain ".&sq($domain).
-	" --path / --url ".&sq($url));
-return ($f2, ($o || '').($o2 || ''));
+return ($f, $tx);
 }
 
 # is_valid_proxy_url(URL) - http(s)://host[:port][/path], no shell/space nasties.

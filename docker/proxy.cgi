@@ -22,6 +22,26 @@ if (!&has_virtualmin()) {
 
 print &help_note($text{'proxy_intro'});
 
+# Read-only diagnostic: show exactly what Virtualmin reports for one domain.
+if ($in{'diag'} && &is_valid_domain($in{'diag'})) {
+	print &ui_subheading(&text('proxy_diag_for', &html_escape($in{'diag'})));
+	my ($lf, $proxies) = &list_domain_proxies($in{'diag'});
+	my $raw = "list-proxies --domain ".$in{'diag'}." --multiline:\n";
+	if ($lf) { $raw .= "  ERROR: ".$proxies."\n"; }
+	elsif (!@$proxies) { $raw .= "  (no proxy balancers found)\n"; }
+	else {
+		foreach my $p (@$proxies) {
+			$raw .= "  path=".($p->{'path'}//'?')."  proxying=".($p->{'proxying'}//'?').
+				"  url=".($p->{'url'}//'?')."\n";
+			}
+	}
+	my ($d) = grep { $_->{'dom'} eq $in{'diag'} } @{&virtualmin_domains()};
+	$raw .= "\ndomain config proxy_pass = ".($d && $d->{'proxy_pass'} ? $d->{'proxy_pass'} : "(unset)")."\n";
+	$raw .= "virtualmin binary = ".(&virtualmin_bin() || "(not found)")."\n";
+	print "<pre class='comment'>".&html_escape($raw)."</pre>";
+	print &ui_hr();
+}
+
 my $doms = &virtualmin_domains();
 my @proxied = grep { $_->{'proxy_pass'} } @$doms;
 my $pubs = &running_publishers();
@@ -84,7 +104,9 @@ else {
 		print &ui_columns_row([
 			&ui_link("https://".&urlize($d->{'dom'}), &html_escape($d->{'dom'}), undef,
 				"target=_blank"),
-			"<tt>".&html_escape($d->{'proxy_pass'})."</tt>",
+			"<tt>".&html_escape($d->{'proxy_pass'})."</tt> ".
+				&ui_link("proxy.cgi?diag=".&urlize($d->{'dom'}),
+					"<small>[".$text{'proxy_diag'}."]</small>"),
 			$state,
 			$form,
 			]);
