@@ -4,7 +4,7 @@
 
 do './docker-lib.pl';
 
-my @acl_keys = qw(view manage create delete exec prune backup registry context);
+my @acl_keys = qw(view manage create delete exec prune backup proxy registry context);
 
 # acl_security_form(&access) - render the ACL editing form.
 sub acl_security_form

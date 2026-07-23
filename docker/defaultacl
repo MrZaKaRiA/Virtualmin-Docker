@@ -7,3 +7,4 @@ prune=1
 registry=1
 context=1
 backup=1
+proxy=1

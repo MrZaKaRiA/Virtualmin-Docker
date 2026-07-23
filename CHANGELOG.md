@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-07-23
+
+Deep manual control and bidirectional Virtualmin integration.
+
+### Added
+- **Virtualmin proxy management** — a new **Domains & Proxies** page. Reads each
+  virtual server's Website Proxy target, shows which container serves it, and
+  flags in red any domain whose proxy points at a port with **no running
+  container** (the "site down after an update" case). One click reconnects the
+  domain to a running container's port via the verified `virtualmin
+  modify-proxy` / `create-proxy` CLI, which reloads the web server itself. A
+  matching dashboard alert links straight to the fix, and each container's
+  Manage tab can connect a domain to its own port. New `proxy` ACL.
+- **Container Details tab** — readable inspect: image, state/health, created,
+  restart policy, compose project, entrypoint/command, ports, mounts, networks
+  and environment (no more raw-JSON hunting).
+- **Network tab** — see a container's networks and connect/disconnect it.
+- **Processes tab** — `docker top` for a container.
+- **Edit .env** — view and edit a Compose project's `.env` (change a version),
+  preserving file owner/permissions, then Update to apply. Linked from the
+  Compose page.
+
+### Fixed
+- Empty "Proxied to" after a port change is now explained and fixable rather
+  than silent — the broken-proxy detector surfaces it.
+
 ## [1.3.0] - 2026-06-23
 
 Made for non-technical users: every risky button now explains itself, and

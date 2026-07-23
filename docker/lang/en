@@ -271,6 +271,7 @@ acl_delete=Can remove containers, images, volumes and networks?
 acl_exec=Can run commands inside containers and copy files?
 acl_prune=Can prune images, volumes, networks and the system?
 acl_backup=Can back up and restore (save / load / commit / export)?
+acl_proxy=Can manage Virtualmin website proxies (reconnect domains to containers)?
 acl_registry=Can log in to registries?
 acl_context=Can switch the Docker context?
 
@@ -284,6 +285,62 @@ monitor_notype=Unknown monitor type
 
 select_all=Select all
 select_invert=Invert selection
+
+nav_proxy=Domains &amp; Proxies
+
+tab_details=Details
+tab_network=Network
+tab_top=Processes
+det_created=Created
+det_started=Started
+det_project=Compose project
+det_entrypoint=Entrypoint
+det_cmd=Command
+det_ports=Ports
+det_mounts=Mounts
+det_networks=Networks
+det_env=Environment
+
+net_connect=Connect
+net_disconnect=Disconnect
+net_connect_to=Connect to a network
+net_connected=Container connected to network
+net_disconnected=Container disconnected from network
+
+cont_connect_domain=Connect a domain to this container
+cont_connect_button=Connect domain
+cont_connect_note=Points the chosen Virtualmin domain's Website Proxy at this container's port and reloads the web server. Use this to reconnect a site after a container's port changed.
+
+proxy_title=Domains &amp; Proxies
+proxy_novm=Virtualmin was not found on this system, so proxy management is unavailable. (Container-to-domain matching still works read-only where domain files exist.)
+proxy_intro=This page shows which Virtualmin website proxies point at your Docker containers. A red row means the domain points at a local port that no running container serves - its website is down. Pick a running container and click Reconnect to fix it (the web server is reloaded automatically).
+proxy_none=No Virtualmin domains have Website Proxying enabled.
+proxy_domain=Domain
+proxy_target=Proxy to URL
+proxy_state=Status
+proxy_reconnect=Reconnect to
+proxy_ok=served by $1
+proxy_broken=no running container on port $1 - site is DOWN
+proxy_external=external target (not managed here)
+proxy_apply=Reconnect
+proxy_advanced=Advanced: set an exact proxy URL
+proxy_manual=Set proxy URL
+proxy_url=Proxy to URL
+proxy_manual_note=Enter the full URL, e.g. http://localhost:3001/ - the module runs "virtualmin modify-proxy" (or create-proxy) and reloads the web server.
+proxy_done=Proxy for $1 updated and the web server reloaded
+proxy_err_domain=Invalid domain name
+proxy_err_port=Invalid port
+proxy_health_heading=Website(s) down: a domain proxy points at a port with no running container
+proxy_health_line=$1 proxies to local port $2, but nothing is running there
+proxy_health_fix=Open Domains &amp; Proxies to reconnect
+
+compose_editenv=Edit .env
+env_title=Edit .env - $1
+env_intro=This is the project's environment file ($1). Change a version number (for example an image tag), save, then click Update below to apply it. Data in volumes is kept.
+env_save_button=Save .env
+env_saved=.env saved
+env_after_note=Saving only writes the file. Click Update to actually pull the new version and recreate the containers.
+env_goto_update=Update this project now &raquo;
 
 cont_update=Update
 cont_help=What do these actions do? Start, Stop and Restart control whether a container runs. NOTE: Restart does NOT load a new version from your compose/.env files - use the bold Update link (shown for Compose projects) for that. Pause freezes a container without stopping it, Kill force-stops it immediately, and Remove deletes the container itself (you will see a red confirmation first; data stored in volumes is kept).

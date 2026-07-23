@@ -72,7 +72,23 @@ my @nav = (
 	&ui_link("registry.cgi", $text{'nav_registry'}),
 	&ui_link("contexts.cgi", $text{'nav_contexts'}),
 	);
+push(@nav, &ui_link("proxy.cgi", $text{'nav_proxy'})) if (&has_virtualmin());
 print "<p>".join(" &nbsp;|&nbsp; ", @nav)."</p>";
+
+# Broken reverse proxies: a domain points at a local port with no running
+# container. This is the "site is down after an update" case.
+if (&has_virtualmin()) {
+	my $broken = &proxy_health();
+	if (@$broken) {
+		my $msg = "<b>".$text{'proxy_health_heading'}."</b><br>".
+			join("<br>", map {
+				&text('proxy_health_line',
+					"<b>".&html_escape($_->{'domain'})."</b>",
+					$_->{'port'}) } @$broken).
+			"<br>".&ui_link("proxy.cgi", "<b>".$text{'proxy_health_fix'}."</b>");
+		print &ui_alert_box($msg, 'danger');
+		}
+	}
 print &ui_hr();
 
 # ---------------------------------------------------------------------------

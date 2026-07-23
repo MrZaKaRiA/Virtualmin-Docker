@@ -1493,24 +1493,53 @@ return @m ? join(", ", @m) : $s;
 # virtual servers that proxy to a local port (Website Proxy Settings). Returns an
 # empty map when Virtualmin is not present or the feature is disabled - it never
 # errors, so it is safe to call on any host.
-sub proxy_map
+# is_valid_domain(D) - allowlist a DNS domain name (crm.example.com).
+sub is_valid_domain
 {
-my %map;
-return \%map if (defined($config{'show_proxy'}) && !$config{'show_proxy'});
+my ($d) = @_;
+return defined($d) && $d =~ /^[A-Za-z0-9](?:[A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?$/
+	&& $d =~ /\./ && $d !~ /\.\./;
+}
+
+# proxy_pass_port(URL) - the local port a proxy_pass URL targets.
+sub proxy_pass_port
+{
+my ($u) = @_;
+return undef if (!defined($u) || $u eq '');
+return $1 if ($u =~ m!://[^/:]+:(\d+)!);
+return ($u =~ m!^https:!i) ? 443 : 80;
+}
+
+# virtualmin_domains() -> listref of { id, dom, proxy_pass } read directly from
+# Virtualmin's domain config files (fast, read-only, no CLI). Empty off Virtualmin.
+sub virtualmin_domains
+{
+my @out;
 my $base = $ENV{'WEBMIN_CONFIG'} || '/etc/webmin';
 my $dir = "$base/virtual-server/domains";
-return \%map if (!-d $dir);
+return \@out if (!-d $dir);
 my $dh;
-opendir($dh, $dir) || return \%map;
+opendir($dh, $dir) || return \@out;
 my @files = grep { /^\d+$/ } readdir($dh);
 closedir($dh);
 foreach my $f (@files) {
 	my %dom;
 	eval { &read_file("$dir/$f", \%dom); };
-	next if (!$dom{'proxy_pass'} || !$dom{'dom'});
-	my $port = ($dom{'proxy_pass'} =~ m!:(\d+)!) ? $1 :
-		   ($dom{'proxy_pass'} =~ m!^https:!i ? 443 : 80);
-	push(@{$map{$port}}, $dom{'dom'});
+	next if (!$dom{'dom'});
+	push(@out, { 'id' => $f, 'dom' => $dom{'dom'},
+		     'proxy_pass' => $dom{'proxy_pass'} });
+	}
+return [ sort { $a->{'dom'} cmp $b->{'dom'} } @out ];
+}
+
+sub proxy_map
+{
+my %map;
+return \%map if (defined($config{'show_proxy'}) && !$config{'show_proxy'});
+foreach my $d (@{&virtualmin_domains()}) {
+	next if (!$d->{'proxy_pass'});
+	my $port = &proxy_pass_port($d->{'proxy_pass'});
+	push(@{$map{$port}}, $d->{'dom'}) if ($port);
 	}
 return \%map;
 }
@@ -1524,6 +1553,253 @@ foreach my $p (&container_host_ports($ports)) {
 	foreach my $dom (@{$pmap->{$p} || []}) { $d{$dom} = 1; }
 	}
 return sort keys %d;
+}
+
+# ----------------------------------------------------------------------------
+# Virtualmin reverse-proxy MANAGEMENT (write side, via the virtualmin CLI)
+# Verified commands: list-proxies / modify-proxy / create-proxy. The CLI applies
+# and reloads the web server itself (run_post_actions).
+# ----------------------------------------------------------------------------
+
+# virtualmin_bin() - path to the virtualmin CLI, or undef when not installed.
+sub virtualmin_bin
+{
+my $p = &has_command('virtualmin');
+return $p if ($p);
+return "/usr/sbin/virtualmin" if (-x "/usr/sbin/virtualmin");
+return undef;
+}
+
+sub has_virtualmin { return &virtualmin_bin() ? 1 : 0; }
+
+# run_virtualmin(ARGSTRING) -> ($failed, $out) - ARGSTRING already sq-quoted.
+sub run_virtualmin
+{
+my ($argstr) = @_;
+my $bin = &virtualmin_bin();
+return (1, "Virtualmin is not installed") if (!$bin);
+my ($out, $err);
+my $status = &execute_command(&sq($bin)." ".$argstr, undef, \$out, \$err, 0, 0);
+return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
+}
+
+# list_domain_proxies(DOMAIN) -> ($failed, \@proxies) each { path, url, proxying }
+sub list_domain_proxies
+{
+my ($domain) = @_;
+return (1, "Invalid domain") if (!&is_valid_domain($domain));
+my $bin = &virtualmin_bin();
+return (1, "Virtualmin is not installed") if (!$bin);
+my ($out, $err);
+my $status = &execute_command(
+	&sq($bin)." list-proxies --domain ".&sq($domain)." --multiline",
+	undef, \$out, \$err, 0, 1);
+return (1, $err || $out) if ($status != 0);
+my @proxies;
+my $cur;
+foreach my $line (split(/\r?\n/, $out)) {
+	if ($line =~ /^(\S.*)$/ && $line !~ /^\s/) {
+		# A path line: the proxy path is the first token / heading.
+		push(@proxies, $cur) if ($cur && $cur->{'path'});
+		$cur = { 'path' => $1 };
+		$cur->{'path'} =~ s/\s+$//;
+		}
+	elsif ($line =~ /^\s+URL:\s*(.*)$/) { $cur->{'url'} = $1; }
+	elsif ($line =~ /^\s+Proxying:\s*(.*)$/) { $cur->{'proxying'} = $1; }
+	}
+push(@proxies, $cur) if ($cur && $cur->{'path'});
+return (0, \@proxies);
+}
+
+# set_domain_proxy(DOMAIN, URL) - point a domain's website proxy at URL. Reuses
+# the existing proxy path if there is one, otherwise creates one at "/".
+sub set_domain_proxy
+{
+my ($domain, $url) = @_;
+return (1, "Invalid domain") if (!&is_valid_domain($domain));
+return (1, "Invalid proxy URL") if (!&is_valid_proxy_url($url));
+my $bin = &virtualmin_bin();
+return (1, "Virtualmin is not installed") if (!$bin);
+
+# Find the existing proxy path (the "Website Proxy Settings" feature uses "/").
+my ($lf, $proxies) = &list_domain_proxies($domain);
+my $path = '/';
+if (!$lf && ref($proxies) eq 'ARRAY' && @$proxies) {
+	my ($root) = grep { $_->{'path'} eq '/' } @$proxies;
+	$path = $root ? '/' : $proxies->[0]->{'path'};
+	}
+# Try to modify the existing proxy; if that fails (e.g. none exists yet),
+# create one at the site root. This tolerates output-format differences.
+my ($f, $o) = &run_virtualmin("modify-proxy --domain ".&sq($domain).
+	" --path ".&sq($path)." --url ".&sq($url));
+return (0, $o) if (!$f);
+my ($f2, $o2) = &run_virtualmin("create-proxy --domain ".&sq($domain).
+	" --path / --url ".&sq($url));
+return ($f2, ($o || '').($o2 || ''));
+}
+
+# is_valid_proxy_url(URL) - http(s)://host[:port][/path], no shell/space nasties.
+sub is_valid_proxy_url
+{
+my ($u) = @_;
+return defined($u) && $u =~ m!^https?://[A-Za-z0-9._\-]+(:\d{1,5})?(/\S*)?$!
+	&& $u !~ /[\s'"\\`\$]/;
+}
+
+# proxy_health() -> listref of BROKEN proxies: a domain proxies to a local port
+# that NO running container publishes. { domain, url, port }.
+sub proxy_health
+{
+my @broken;
+my $doms = &virtualmin_domains();
+return \@broken if (!@$doms);
+my ($cf, $cont) = &list_containers();
+my %live;
+if (!$cf) {
+	foreach my $c (@$cont) {
+		next if ($c->{'state'} ne 'running');
+		foreach my $p (&container_host_ports($c->{'ports'})) {
+			$live{$p} ||= $c->{'name'};
+			}
+		}
+	}
+foreach my $d (@$doms) {
+	next if (!$d->{'proxy_pass'});
+	# Only local targets are ours to reason about.
+	next if ($d->{'proxy_pass'} !~ m!^https?://(localhost|127\.0\.0\.1)!i);
+	my $port = &proxy_pass_port($d->{'proxy_pass'});
+	next if (!$port || $live{$port});
+	push(@broken, { 'domain' => $d->{'dom'}, 'url' => $d->{'proxy_pass'},
+			'port' => $port });
+	}
+return \@broken;
+}
+
+# running_publishers() -> listref of { name, port } for every running container
+# that publishes at least one host port (for "reconnect to..." selectors).
+sub running_publishers
+{
+my ($cf, $cont) = &list_containers();
+return [] if ($cf);
+my @out;
+foreach my $c (@$cont) {
+	next if ($c->{'state'} ne 'running');
+	foreach my $p (&container_host_ports($c->{'ports'})) {
+		push(@out, { 'name' => $c->{'name'}, 'port' => $p });
+		}
+	}
+return [ sort { $a->{'port'} <=> $b->{'port'} } @out ];
+}
+
+# ----------------------------------------------------------------------------
+# Container details, processes, and project .env editing
+# ----------------------------------------------------------------------------
+
+# docker_top(REF) -> ($failed, $text) - processes running inside a container.
+sub docker_top
+{
+my ($ref) = @_;
+return (1, "Invalid container reference") if (!&is_valid_ref($ref));
+my ($f, $out, $err) = &run_docker('top '.&sq($ref), undef, 1);
+return ($f, $f ? ($err || $out) : $out);
+}
+
+# container_details(REF) -> ($failed, \%info) - inspect parsed into readable bits.
+sub container_details
+{
+my ($ref) = @_;
+return (1, "Invalid container reference") if (!&is_valid_ref($ref));
+my ($f, $data) = &docker_json_array('container inspect --format "{{json .}}" '.&sq($ref));
+return ($f, $data) if ($f);
+my $d = ref($data) eq 'ARRAY' ? $data->[0] : $data;
+return (1, "Could not read container") if (ref($d) ne 'HASH');
+
+my @nets;
+my $ns = $d->{'NetworkSettings'}{'Networks'} || {};
+foreach my $n (sort keys %$ns) {
+	push(@nets, { 'name' => $n, 'ip' => $ns->{$n}{'IPAddress'},
+		      'gateway' => $ns->{$n}{'Gateway'}, 'mac' => $ns->{$n}{'MacAddress'} });
+	}
+my @mounts;
+foreach my $m (@{$d->{'Mounts'} || []}) {
+	push(@mounts, { 'type' => $m->{'Type'},
+			'src' => ($m->{'Name'} || $m->{'Source'}),
+			'dst' => $m->{'Destination'},
+			'mode' => ($m->{'RW'} ? 'rw' : 'ro') });
+	}
+my @ports;
+my $pb = $d->{'NetworkSettings'}{'Ports'} || {};
+foreach my $k (sort keys %$pb) {
+	if ($pb->{$k} && @{$pb->{$k}}) {
+		foreach my $b (@{$pb->{$k}}) {
+			push(@ports, ($b->{'HostIp'} ? $b->{'HostIp'}.':' : '').
+				($b->{'HostPort'} || '')." -> ".$k);
+			}
+		}
+	else { push(@ports, $k." (not published)"); }
+	}
+return (0, {
+	'name'       => substr($d->{'Name'} || '', 1),
+	'image'      => $d->{'Config'}{'Image'},
+	'state'      => $d->{'State'}{'Status'},
+	'health'     => $d->{'State'}{'Health'} ? $d->{'State'}{'Health'}{'Status'} : '',
+	'started'    => $d->{'State'}{'StartedAt'},
+	'created'    => $d->{'Created'},
+	'restart'    => $d->{'HostConfig'}{'RestartPolicy'}{'Name'},
+	'cmd'        => join(" ", @{$d->{'Config'}{'Cmd'} || []}),
+	'entrypoint' => join(" ", @{$d->{'Config'}{'Entrypoint'} || []}),
+	'env'        => $d->{'Config'}{'Env'} || [],
+	'project'    => ($d->{'Config'}{'Labels'} || {})->{'com.docker.compose.project'},
+	'networks'   => \@nets,
+	'mounts'     => \@mounts,
+	'ports'      => \@ports,
+	});
+}
+
+# project_env_file(PROJECT) -> ($failed, $path) - the .env beside the project's
+# first compose file.
+sub project_env_file
+{
+my ($project) = @_;
+my ($pf, $p) = &find_compose_project($project);
+return (1, $p) if ($pf);
+my ($ff, $files) = &compose_project_files($p);
+return (1, $files) if ($ff);
+my $dir = $files->[0];
+$dir =~ s![^/]+$!!;
+return (0, $dir.".env");
+}
+
+# read_project_env(PROJECT) -> ($failed, $content, $path)
+sub read_project_env
+{
+my ($project) = @_;
+my ($ef, $env) = &project_env_file($project);
+return (1, $env) if ($ef);
+return (0, "", $env) if (!-e $env);
+return (1, "Cannot read the .env file", $env) if (!-r $env);
+my $c = &read_file_contents($env);
+return (0, defined($c) ? $c : "", $env);
+}
+
+# write_project_env(PROJECT, CONTENT) - overwrite the project's .env, preserving
+# the original owner and permissions (it belongs to the Virtualmin domain user).
+sub write_project_env
+{
+my ($project, $content) = @_;
+my ($ef, $env) = &project_env_file($project);
+return (1, $env) if ($ef);
+return (1, "The .env content contains a NUL byte") if ($content =~ /\0/);
+$content =~ s/\r\n/\n/g;
+my @st = stat($env);
+open(my $fh, ">", $env) || return (1, "Could not write $env");
+print $fh $content;
+close($fh);
+if (@st) {
+	chown($st[4], $st[5], $env);
+	chmod($st[2] & 07777, $env);
+	}
+return (0, $env);
 }
 
 # ----------------------------------------------------------------------------

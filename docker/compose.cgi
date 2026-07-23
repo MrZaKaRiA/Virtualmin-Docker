@@ -81,12 +81,15 @@ else {
 					"</span>";
 				}
 			}
-		# Read-only views as compact links instead of two more buttons.
+		# Read-only views + .env editor as compact links.
 		$actions .= "<span style='display:inline-block;margin:1px 4px'>".
 			&ui_link("compose.cgi?show=logs&project=".&urlize($name),
 				$text{'compose_logs2'})." | ".
 			&ui_link("compose.cgi?show=ps&project=".&urlize($name),
-				$text{'compose_ps2'})."</span>";
+				$text{'compose_ps2'});
+		$actions .= " | ".&ui_link("env.cgi?project=".&urlize($name),
+			$text{'compose_editenv'}) if (&can('manage'));
+		$actions .= "</span>";
 		print &ui_columns_row([
 			&html_escape($name),
 			$dom ? &ui_link("https://".&urlize($dom), &html_escape($dom), undef,

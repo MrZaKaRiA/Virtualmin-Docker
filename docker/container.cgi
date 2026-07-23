@@ -43,7 +43,10 @@ print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});
 
 my $tab = $in{'tab'} || 'log';
 my @tabs = ( [ 'log', $text{'tab_log'} ],
+	     [ 'details', $text{'tab_details'} ],
 	     [ 'inspect', $text{'tab_inspect'} ],
+	     [ 'network', $text{'tab_network'} ],
+	     [ 'top', $text{'tab_top'} ],
 	     [ 'exec', $text{'tab_exec'} ],
 	     [ 'stats', $text{'tab_stats'} ],
 	     [ 'manage', $text{'tab_manage'} ] );
@@ -104,11 +107,86 @@ print <<"EOJS";
 EOJS
 print &ui_tabs_end_tab();
 
-# ---- INSPECT ---------------------------------------------------------------
+# ---- DETAILS (readable) ----------------------------------------------------
+print &ui_tabs_start_tab('tab', 'details');
+my ($df, $det) = &container_details($id);
+if ($df) { print &ui_alert_box(&html_escape($det), 'danger'); }
+else {
+	print &ui_table_start($text{'tab_details'}, undef, 2);
+	print &ui_table_row($text{'cont_name'}, &html_escape($det->{'name'}));
+	print &ui_table_row($text{'cont_image'}, &html_escape($det->{'image'}));
+	print &ui_table_row($text{'cont_status'},
+		&state_label($det->{'state'}, $det->{'state'}).
+		($det->{'health'} ? " (".&html_escape($det->{'health'}).")" : ""));
+	print &ui_table_row($text{'det_created'}, &html_escape($det->{'created'}));
+	print &ui_table_row($text{'det_started'}, &html_escape($det->{'started'}));
+	print &ui_table_row($text{'create_restart'}, &html_escape($det->{'restart'}));
+	print &ui_table_row($text{'det_project'}, &html_escape($det->{'project'} || "-"));
+	print &ui_table_row($text{'det_entrypoint'}, "<tt>".&html_escape($det->{'entrypoint'} || "-")."</tt>");
+	print &ui_table_row($text{'det_cmd'}, "<tt>".&html_escape($det->{'cmd'} || "-")."</tt>");
+	print &ui_table_row($text{'det_ports'},
+		@{$det->{'ports'}} ? join("<br>", map { &html_escape($_) } @{$det->{'ports'}}) : "-");
+	print &ui_table_row($text{'det_mounts'},
+		@{$det->{'mounts'}} ? join("<br>", map {
+			&html_escape($_->{'src'})." &rarr; ".&html_escape($_->{'dst'}).
+			" (".$_->{'mode'}.", ".&html_escape($_->{'type'}).")" } @{$det->{'mounts'}}) : "-");
+	print &ui_table_row($text{'det_networks'},
+		@{$det->{'networks'}} ? join("<br>", map {
+			"<b>".&html_escape($_->{'name'})."</b> ".&html_escape($_->{'ip'} || "") } @{$det->{'networks'}}) : "-");
+	print &ui_table_row($text{'det_env'},
+		@{$det->{'env'}} ? "<pre class='comment' style='max-height:260px;overflow:auto'>".
+			join("\n", map { &html_escape($_) } @{$det->{'env'}})."</pre>" : "-");
+	print &ui_table_end();
+	}
+print &ui_tabs_end_tab();
+
+# ---- INSPECT (raw JSON) ----------------------------------------------------
 print &ui_tabs_start_tab('tab', 'inspect');
 my ($inf, $insp) = &inspect_container($id);
 if ($inf) { print &ui_alert_box(&html_escape($insp), 'danger'); }
 else { print "<pre class='comment'>".&html_escape($insp)."</pre>"; }
+print &ui_tabs_end_tab();
+
+# ---- NETWORK (connect / disconnect) ----------------------------------------
+print &ui_tabs_start_tab('tab', 'network');
+my ($ndf, $ndet) = &container_details($id);
+if (!$ndf && @{$ndet->{'networks'}}) {
+	print &ui_columns_start([ $text{'stor_name'}, "IP", "" ], 100);
+	foreach my $n (@{$ndet->{'networks'}}) {
+		my $disc = "";
+		if (&can('manage')) {
+			$disc = &ui_form_start("act.cgi", "post").
+				&ui_hidden("c", "net_disconnect").
+				&ui_hidden("id", $id).
+				&ui_hidden("network", $n->{'name'}).
+				&ui_submit($text{'net_disconnect'}).
+				&ui_form_end();
+			}
+		print &ui_columns_row([ "<b>".&html_escape($n->{'name'})."</b>",
+			&html_escape($n->{'ip'} || ""), $disc ]);
+		}
+	print &ui_columns_end();
+	}
+if (&can('manage')) {
+	my ($nlf, $nets) = &list_networks();
+	if (!$nlf) {
+		print &ui_form_start("act.cgi", "post");
+		print &ui_hidden("c", "net_connect");
+		print &ui_hidden("id", $id);
+		print &ui_table_start($text{'net_connect_to'}, undef, 2);
+		print &ui_table_row($text{'tab_network'},
+			&ui_select("network", "", [ map { [ $_->{'name'}, $_->{'name'} ] } @$nets ]));
+		print &ui_table_end();
+		print &ui_form_end([ [ undef, $text{'net_connect'} ] ]);
+		}
+	}
+print &ui_tabs_end_tab();
+
+# ---- TOP (processes) -------------------------------------------------------
+print &ui_tabs_start_tab('tab', 'top');
+my ($tf, $topout) = &docker_top($id);
+if ($tf) { print &ui_alert_box(&html_escape($topout), 'warn'); }
+else { print "<pre class='comment'>".&html_escape($topout)."</pre>"; }
 print &ui_tabs_end_tab();
 
 # ---- EXEC ------------------------------------------------------------------
@@ -216,6 +294,28 @@ if (&can('backup')) {
 	print &ui_table_row($text{'backup_path'}, &ui_textbox("path", "$bdir/$disp.tar", 50));
 	print &ui_table_end();
 	print &ui_form_end([ [ undef, $text{'container_export_button'} ] ]);
+	}
+
+# Connect a Virtualmin domain to this container's published port.
+if (&can('proxy') && &has_virtualmin()) {
+	my ($clf, $clist) = &list_containers();
+	my ($me) = !$clf ? grep { $_->{'id'} eq $id || $_->{'name'} eq $name } @$clist : ();
+	my @cports = $me ? &container_host_ports($me->{'ports'}) : ();
+	if (@cports) {
+		my $doms = &virtualmin_domains();
+		print &ui_hr();
+		print &ui_form_start("act.cgi", "post");
+		print &ui_hidden("c", "connect_domain");
+		print &ui_hidden("id", $id);
+		print &ui_table_start($text{'cont_connect_domain'}, undef, 2);
+		print &ui_table_row($text{'proxy_domain'},
+			&ui_select("domain", "", [ map { [ $_->{'dom'}, $_->{'dom'} ] } @$doms ]));
+		print &ui_table_row($text{'det_ports'},
+			&ui_select("port", $cports[0], [ map { [ $_, "port ".$_ ] } @cports ]));
+		print &ui_table_end();
+		print &ui_form_end([ [ undef, $text{'cont_connect_button'} ] ]);
+		print &help_note($text{'cont_connect_note'});
+		}
 	}
 
 # Remove this container.

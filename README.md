@@ -10,7 +10,7 @@ with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 [![Webmin module](https://img.shields.io/badge/Webmin-module-FF6600.svg)](https://webmin.com)
 [![Virtualmin](https://img.shields.io/badge/Virtualmin-integrated-2E7D32.svg)](https://virtualmin.com)
-[![Version](https://img.shields.io/badge/version-1.3.0-success.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-success.svg)](CHANGELOG.md)
 [![Hardened](https://img.shields.io/badge/shell--injection-hardened-brightgreen.svg)](#-security-model)
 
 </div>
@@ -119,6 +119,13 @@ domain right in the container list:
 It reads Virtualmin's domain definitions read-only, links each domain through to
 the live site, and **degrades silently to nothing on non-Virtualmin hosts**. Turn it
 off any time in **Module Config**.
+
+**And it can fix them.** The **Domains & Proxies** page manages the *write* side:
+it flags any domain whose Website Proxy points at a port with no running
+container (a site that's down — e.g. after a container's port changed), and
+reconnects it to a running container in one click via the `virtualmin
+modify-proxy` / `create-proxy` CLI (which reloads the web server for you). The
+dashboard shows a red alert linking straight to the fix.
 
 ## 🔒 Security model
 

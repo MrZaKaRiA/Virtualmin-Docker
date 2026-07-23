@@ -419,6 +419,62 @@ elsif ($c eq 'compose_project') {
 		$o eq '' ? $text{'exec_nooutput'} : $o);
 	}
 
+# ---- Virtualmin proxy management -------------------------------------------
+
+elsif ($c eq 'set_proxy') {
+	&require_acl('proxy');
+	&is_valid_domain($in{'domain'}) || &error($text{'proxy_err_domain'});
+	my $url = $in{'url'};
+	# The one-click selector sends a port; build the localhost URL from it.
+	if (!defined($url) || $url eq '') {
+		$in{'port'} =~ /^\d{1,5}$/ || &error($text{'proxy_err_port'});
+		$url = "http://localhost:".$in{'port'}."/";
+		}
+	my ($f, $o) = &set_domain_proxy($in{'domain'}, $url);
+	&webmin_log("proxy", "domain", $in{'domain'}, { 'url' => $url }) if (!$f);
+	&redir("proxy.cgi", $f ? undef : &text('proxy_done', &html_escape($in{'domain'})),
+		$f ? $o : undef);
+	}
+elsif ($c eq 'connect_domain') {
+	# Repoint a domain at THIS container's published port (from container page).
+	&require_acl('proxy');
+	&is_valid_domain($in{'domain'}) || &error($text{'proxy_err_domain'});
+	$in{'port'} =~ /^\d{1,5}$/ || &error($text{'proxy_err_port'});
+	my ($f, $o) = &set_domain_proxy($in{'domain'}, "http://localhost:".$in{'port'}."/");
+	&webmin_log("proxy", "domain", $in{'domain'}, { 'port' => $in{'port'} }) if (!$f);
+	&redir("container.cgi?tab=manage&id=".&urlize($in{'id'}),
+		$f ? undef : &text('proxy_done', &html_escape($in{'domain'})),
+		$f ? $o : undef);
+	}
+
+# ---- networks (connect / disconnect a container) ---------------------------
+
+elsif ($c eq 'net_connect') {
+	&require_acl('manage');
+	my ($f, $o) = &connect_network($in{'network'}, $in{'id'});
+	&webmin_log("connect", "network", $in{'network'}, { 'container' => $in{'id'} }) if (!$f);
+	&redir("container.cgi?tab=network&id=".&urlize($in{'id'}),
+		$f ? undef : $text{'net_connected'}, $f ? $o : undef);
+	}
+elsif ($c eq 'net_disconnect') {
+	&require_acl('manage');
+	my ($f, $o) = &disconnect_network($in{'network'}, $in{'id'});
+	&webmin_log("disconnect", "network", $in{'network'}, { 'container' => $in{'id'} }) if (!$f);
+	&redir("container.cgi?tab=network&id=".&urlize($in{'id'}),
+		$f ? undef : $text{'net_disconnected'}, $f ? $o : undef);
+	}
+
+# ---- compose project .env editing ------------------------------------------
+
+elsif ($c eq 'env_save') {
+	&require_acl('manage');
+	&is_valid_name($in{'project'}) || &error($text{'update_err_noproject'});
+	my ($f, $o) = &write_project_env($in{'project'}, $in{'content'});
+	&webmin_log("env", "compose", $in{'project'}) if (!$f);
+	&redir("env.cgi?project=".&urlize($in{'project'}),
+		$f ? undef : $text{'env_saved'}, $f ? $o : undef);
+	}
+
 # ---- security --------------------------------------------------------------
 
 elsif ($c eq 'scan') {
