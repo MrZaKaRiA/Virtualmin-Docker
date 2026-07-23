@@ -1646,13 +1646,48 @@ return defined($u) && $u =~ m!^https?://[A-Za-z0-9._\-]+(:\d{1,5})?(/\S*)?$!
 	&& $u !~ /[\s'"\\`\$]/;
 }
 
-# proxy_health() -> listref of BROKEN proxies: a domain proxies to a local port
-# that NO running container publishes. { domain, url, port }.
+# domain_container_map() -> hashref { domain => { port, container } }: for each
+# Virtualmin domain that hosts a RUNNING Compose project (its compose file lives
+# under /home/*/domains/<domain>/), the web container's published host port. This
+# lets us match a domain to its own container even when the proxy port is wrong.
+sub domain_container_map
+{
+my %m;
+my $dmap = &compose_domain_map();   # project -> domain
+return \%m if (!%$dmap);
+my ($cf, $cont) = &list_containers();
+return \%m if ($cf);
+my %by_dom;
+foreach my $c (@$cont) {
+	next if ($c->{'state'} ne 'running');
+	my $proj = &container_project($c->{'labels'});
+	next if (!$proj);
+	my $dom = $dmap->{$proj};
+	next if (!$dom);
+	my $web = ($c->{'name'} =~ /server|web|app|nginx|caddy|frontend|http|traefik/i) ? 1 : 0;
+	foreach my $p (&container_host_ports($c->{'ports'})) {
+		push(@{$by_dom{$dom}}, { 'name' => $c->{'name'}, 'port' => $p, 'web' => $web });
+		}
+	}
+foreach my $dom (keys %by_dom) {
+	my @cands = @{$by_dom{$dom}};
+	my ($best) = grep { $_->{'web'} } @cands;
+	$best ||= $cands[0];
+	$m{$dom} = { 'port' => $best->{'port'}, 'container' => $best->{'name'} };
+	}
+return \%m;
+}
+
+# proxy_health() -> { regressed => [...], undeployed => [...] }.
+#   regressed: domain proxies to a dead port, but its OWN running container is on
+#              a different port - auto-fixable. { domain, url, port, suggested, container }
+#   undeployed: domain proxies to a dead port and has no running container of its
+#               own - the service just isn't running. { domain, url, port }
 sub proxy_health
 {
-my @broken;
+my (@regressed, @undeployed);
 my $doms = &virtualmin_domains();
-return \@broken if (!@$doms);
+return { 'regressed' => [], 'undeployed' => [] } if (!@$doms);
 my ($cf, $cont) = &list_containers();
 my %live;
 if (!$cf) {
@@ -1663,16 +1698,23 @@ if (!$cf) {
 			}
 		}
 	}
+my $dcm = &domain_container_map();
 foreach my $d (@$doms) {
 	next if (!$d->{'proxy_pass'});
-	# Only local targets are ours to reason about.
 	next if ($d->{'proxy_pass'} !~ m!^https?://(localhost|127\.0\.0\.1)!i);
 	my $port = &proxy_pass_port($d->{'proxy_pass'});
 	next if (!$port || $live{$port});
-	push(@broken, { 'domain' => $d->{'dom'}, 'url' => $d->{'proxy_pass'},
+	if ($dcm->{$d->{'dom'}}) {
+		push(@regressed, { 'domain' => $d->{'dom'}, 'url' => $d->{'proxy_pass'},
+			'port' => $port, 'suggested' => $dcm->{$d->{'dom'}}{'port'},
+			'container' => $dcm->{$d->{'dom'}}{'container'} });
+		}
+	else {
+		push(@undeployed, { 'domain' => $d->{'dom'}, 'url' => $d->{'proxy_pass'},
 			'port' => $port });
+		}
 	}
-return \@broken;
+return { 'regressed' => \@regressed, 'undeployed' => \@undeployed };
 }
 
 # running_publishers() -> listref of { name, port } for every running container

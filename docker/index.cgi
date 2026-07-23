@@ -75,20 +75,39 @@ my @nav = (
 push(@nav, &ui_link("proxy.cgi", $text{'nav_proxy'})) if (&has_virtualmin());
 print "<p>".join(" &nbsp;|&nbsp; ", @nav)."</p>";
 
-# Broken reverse proxies: a domain points at a local port with no running
-# container. This is the "site is down after an update" case.
+# Reverse-proxy health. Regressions (a domain whose own container moved ports)
+# are actionable and shown prominently with a one-click fix. Not-yet-deployed
+# services are shown quietly - they are not errors.
 if (&has_virtualmin()) {
-	my $broken = &proxy_health();
-	if (@$broken) {
-		my $msg = "<b>".$text{'proxy_health_heading'}."</b><br>".
-			join("<br>", map {
-				&text('proxy_health_line',
-					"<b>".&html_escape($_->{'domain'})."</b>",
-					$_->{'port'}) } @$broken).
-			"<br>".&ui_link("proxy.cgi", "<b>".$text{'proxy_health_fix'}."</b>");
-		print &ui_alert_box($msg, 'danger');
+	my $h = &proxy_health();
+	if (@{$h->{'regressed'}}) {
+		my $msg = "<b>".$text{'proxy_health_heading'}."</b>";
+		foreach my $r (@{$h->{'regressed'}}) {
+			my $fix = "";
+			if (&can('proxy')) {
+				$fix = " ".&ui_form_start("act.cgi", "post").
+					&ui_hidden("c", "set_proxy").
+					&ui_hidden("domain", $r->{'domain'}).
+					&ui_hidden("port", $r->{'suggested'}).
+					&ui_submit($text{'proxy_fix_now'}).
+					&ui_form_end();
+			}
+			$msg .= "<div style='margin-top:6px'>".
+				&text('proxy_health_regressed',
+					"<b>".&html_escape($r->{'domain'})."</b>",
+					$r->{'port'}, $r->{'suggested'},
+					&html_escape($r->{'container'})).$fix."</div>";
 		}
+		print &ui_alert_box($msg, 'danger');
 	}
+	if (@{$h->{'undeployed'}}) {
+		my @d = map { &html_escape($_->{'domain'})." (".$_->{'port'}.")" }
+			@{$h->{'undeployed'}};
+		print &ui_alert_box(
+			&text('proxy_health_undeployed', scalar(@d))."<br>".
+			"<span style='opacity:.8'>".join(", ", @d)."</span>", 'info');
+	}
+}
 print &ui_hr();
 
 # ---------------------------------------------------------------------------

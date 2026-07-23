@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-07-23
+
+### Changed
+- Smarter proxy-health detection. Instead of flagging every domain whose proxy
+  points at a down port as a red "error", the dashboard now separates:
+  **regressed** (a domain whose OWN running container moved to a different port
+  — matched via the compose file's `/domains/<domain>/` path) shown prominently
+  with a one-click **Fix now** to the exact right port; and **not deployed**
+  (no container for that domain) shown as a quiet informational note, not an
+  error. The Domains & Proxies page suggests the exact target for regressions
+  and is honest about undeployed domains.
+
 ## [1.4.0] - 2026-07-23
 
 Deep manual control and bidirectional Virtualmin integration.

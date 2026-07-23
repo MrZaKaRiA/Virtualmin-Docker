@@ -25,6 +25,7 @@ print &help_note($text{'proxy_intro'});
 my $doms = &virtualmin_domains();
 my @proxied = grep { $_->{'proxy_pass'} } @$doms;
 my $pubs = &running_publishers();
+my $dcm = &domain_container_map();   # domain -> { port, container }
 
 # Options for the "reconnect to" selector: running containers and their ports.
 my @portopts = map { [ $_->{'port'}, $_->{'name'}." (port ".$_->{'port'}.")" ] } @$pubs;
@@ -42,27 +43,44 @@ else {
 	foreach my $d (@proxied) {
 		my $port = &proxy_pass_port($d->{'proxy_pass'});
 		my $local = ($d->{'proxy_pass'} =~ m!^https?://(localhost|127\.0\.0\.1)!i);
-		my $state;
+		my $own = $dcm->{$d->{'dom'}};       # this domain's own running container
+		my ($state, $form) = ("", "");
+
 		if (!$local) {
 			$state = &ui_text_color($text{'proxy_external'}, 'info');
 			}
 		elsif ($live{$port}) {
 			$state = &ui_text_color("&#10003; ".&text('proxy_ok', &html_escape($live{$port})), 'success');
 			}
+		elsif ($own) {
+			# Regressed: its own container is on a different port. One-click fix.
+			$state = &ui_text_color("&#9888; ".&text('proxy_regressed',
+				$own->{'port'}, &html_escape($own->{'container'})), 'danger');
+			if (&can('proxy')) {
+				$form = &ui_form_start("act.cgi", "post").
+					&ui_hidden("c", "set_proxy").
+					&ui_hidden("domain", $d->{'dom'}).
+					&ui_hidden("port", $own->{'port'}).
+					&ui_submit(&text('proxy_fix_to', $own->{'port'})).
+					&ui_form_end();
+				}
+			}
 		else {
-			$state = &ui_text_color("&#9888; ".&text('proxy_broken', $port), 'danger');
+			# No running container for this domain - not deployed.
+			$state = &ui_text_color("&#9679; ".&text('proxy_undeployed', $port), 'warn');
 			}
 
-		my $form = "";
-		if (&can('proxy') && @portopts) {
+		# Fallback manual selector (any running container) for local rows that
+		# have no exact suggestion, so nothing is a dead end.
+		if (&can('proxy') && $local && !$live{$port} && !$own && @portopts) {
 			$form = &ui_form_start("act.cgi", "post").
 				&ui_hidden("c", "set_proxy").
 				&ui_hidden("domain", $d->{'dom'}).
-				&ui_select("port", ($live{$port} ? $port : ($portopts[0]->[0])),
-					\@portopts).
+				&ui_select("port", $portopts[0]->[0], \@portopts).
 				" ".&ui_submit($text{'proxy_apply'}).
 				&ui_form_end();
 			}
+
 		print &ui_columns_row([
 			&ui_link("https://".&urlize($d->{'dom'}), &html_escape($d->{'dom'}), undef,
 				"target=_blank"),
@@ -72,6 +90,7 @@ else {
 			]);
 		}
 	print &ui_columns_end();
+	print &help_note($text{'proxy_legend'});
 	}
 
 # Advanced: set an exact URL.
