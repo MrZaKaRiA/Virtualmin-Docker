@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-07-24
+
+### Fixed
+- **Proxy reconnect on Nginx.** The previous version used the `virtualmin
+  create-proxy`/`modify-proxy` CLI, which only works on Apache (proxy
+  *balancers*) and failed with "Proxies cannot be configured for this virtual
+  server" on Nginx hosts. Rewrote the reconnect to call Virtualmin's Perl API
+  directly (the same code the UI uses), branching by web server: Apache uses
+  proxy balancers; Nginx (and other plugins) set the domain's `proxy_pass`
+  metadata and regenerate the web config via the plugin. The result page shows
+  the detected web server, the method used, and the exact outcome. A `[diagnose]`
+  link now reports the web server too. On failure it points to the reliable
+  Docker-side alternative (change the container's published port via Edit .env,
+  then Update).
+
 ## [1.5.0] - 2026-07-24
 
 ### Fixed

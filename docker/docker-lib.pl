@@ -1631,40 +1631,97 @@ push(@proxies, $cur) if ($cur);
 return (0, \@proxies);
 }
 
-# set_domain_proxy(DOMAIN, URL) -> ($failed, $transcript). Points a domain's
-# website proxy at URL. Uses modify-proxy when a balancer exists at the chosen
-# path, create-proxy when it does not, and falls back to the other command if
-# the first fails. Returns a full transcript so the result is always visible.
+# set_domain_proxy(DOMAIN, URL) -> ($failed, $transcript). Repoints a domain's
+# website proxy at URL using Virtualmin's Perl API directly (the same code the
+# UI uses), which works for BOTH Apache (proxy balancers) and Nginx (the plugin
+# writes the proxy_pass from the domain metadata). The CLI proxy programs are
+# Apache-only, so they are not used here.
 sub set_domain_proxy
 {
 my ($domain, $url) = @_;
 return (1, "Invalid domain") if (!&is_valid_domain($domain));
 return (1, "Invalid proxy URL") if (!&is_valid_proxy_url($url));
-my $bin = &virtualmin_bin();
-return (1, "Virtualmin was not found. Install it or check /usr/sbin/virtualmin.") if (!$bin);
 
-my @paths = &domain_proxy_paths($domain);
-my $path = (grep { $_ eq '/' } @paths) ? '/' : ($paths[0] || '/');
-my $exists = (grep { $_ eq $path } @paths) ? 1 : 0;
-my $first = $exists ? 'modify' : 'create';
-my $second = $exists ? 'create' : 'modify';
+my $tx = "";
+eval { &foreign_require("virtual-server"); };
+return (1, "Could not load Virtualmin: $@") if ($@);
+my $d = &virtual_server::get_domain_by("dom", $domain);
+return (1, "Virtual server $domain was not found") if (!$d);
 
-my $tx = "Existing proxy paths: ".(@paths ? join(", ", @paths) : "(none)")."\n";
-my $run = sub {
-	my ($verb) = @_;
-	$tx .= "\n\$ virtualmin $verb-proxy --domain $domain --path $path --url $url\n";
-	my ($f, $o) = &run_virtualmin("$verb-proxy --domain ".&sq($domain).
-		" --path ".&sq($path)." --url ".&sq($url));
-	$tx .= ($o eq '' ? "(no output)\n" : $o.($o =~ /\n$/ ? "" : "\n"));
-	return $f;
-	};
+my $web = &virtual_server::domain_has_website($d);
+$tx .= "Domain      : $domain\n";
+$tx .= "Web server  : ".($web eq 'web' ? "Apache" : ($web || "none"))."\n";
+$tx .= "New target  : $url\n\n";
+return (1, $tx."This domain has no website feature, so it cannot proxy.") if (!$web);
 
-my $f = $run->($first);
-if ($f) {
-	# The first verb was wrong for the current state - try the other one.
-	$f = $run->($second);
+my $err;
+my $method;
+
+# Apache path (or any web feature that exposes proxy balancers).
+my $has_bal = 0;
+eval { $has_bal = &virtual_server::has_proxy_balancer($d); };
+my @bal;
+eval { @bal = &virtual_server::list_proxy_balancers($d); };
+my ($root) = grep { $_->{'path'} eq '/' } @bal;
+
+if ($root) {
+	$method = "update the existing '/' proxy balancer";
+	my $oldb = { %$root };
+	$root->{'none'} = 0;
+	$root->{'urls'} = [ $url ];
+	eval { $err = &virtual_server::modify_proxy_balancer($d, $root, $oldb); };
+	$err ||= $@;
 	}
-return ($f, $tx);
+elsif ($has_bal) {
+	$method = "create a '/' proxy balancer";
+	my $b = { 'path' => '/', 'none' => 0, 'websockets' => 1, 'urls' => [ $url ] };
+	eval { $err = &virtual_server::create_proxy_balancer($d, $b); };
+	$err ||= $@;
+	}
+else {
+	# Nginx / plugin: set the proxy_pass metadata and re-apply the web feature
+	# so the plugin rewrites its config, exactly like the UI does.
+	$method = "set proxy_pass and regenerate the $web config";
+	my %oldd = %$d;
+	$d->{'proxy_pass'} = $url;
+	eval { &virtual_server::save_domain($d); };
+	$err = $@;
+	if (!$err) {
+		eval {
+			if (&plugin_defined($web, "feature_modify")) {
+				&plugin_call($web, "feature_modify", $d, \%oldd);
+				}
+			elsif (defined(&virtual_server::modify_web)) {
+				&virtual_server::modify_web($d, \%oldd);
+				}
+			};
+		$err = $@;
+		}
+	}
+
+$tx .= "Method      : $method\n\n";
+
+if (!$err) {
+	# Keep metadata in sync and reload the web server.
+	$d->{'proxy_pass'} = $url;
+	eval { &virtual_server::save_domain($d); };
+	eval {
+		if (defined(&virtual_server::run_post_actions_silently)) {
+			&virtual_server::run_post_actions_silently();
+			}
+		elsif (defined(&virtual_server::run_post_actions)) {
+			&virtual_server::run_post_actions();
+			}
+		};
+	$tx .= "SUCCESS - the proxy now points to $url and the web server was reloaded.\n";
+	return (0, $tx);
+	}
+
+$tx .= "ERROR: $err\n\n".
+	"Tip: you can instead make the container publish on the port the domain\n".
+	"already expects. Open the Compose page, Edit .env, set the port back, and\n".
+	"click Update - no proxy change needed.\n";
+return (1, $tx);
 }
 
 # is_valid_proxy_url(URL) - http(s)://host[:port][/path], no shell/space nasties.

@@ -38,6 +38,17 @@ if ($in{'diag'} && &is_valid_domain($in{'diag'})) {
 	}
 	my ($d) = grep { $_->{'dom'} eq $in{'diag'} } @{&virtualmin_domains()};
 	$raw .= "\ndomain config proxy_pass = ".($d && $d->{'proxy_pass'} ? $d->{'proxy_pass'} : "(unset)")."\n";
+	# The web server determines which proxy mechanism applies.
+	my $ws = "unknown";
+	eval {
+		&foreign_require("virtual-server");
+		my $vd = &virtual_server::get_domain_by("dom", $in{'diag'});
+		if ($vd) {
+			my $w = &virtual_server::domain_has_website($vd);
+			$ws = $w eq 'web' ? "Apache (proxy balancers)" : ($w || "none");
+			}
+		};
+	$raw .= "web server = $ws\n";
 	$raw .= "virtualmin binary = ".(&virtualmin_bin() || "(not found)")."\n";
 	print "<pre class='comment'>".&html_escape($raw)."</pre>";
 	print &ui_hr();
