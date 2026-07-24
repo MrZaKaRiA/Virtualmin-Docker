@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-07-24
+
+### Changed
+- **Use the theme's own design, not a custom one.** Removed the module's
+  stylesheet entirely and rebuilt every element from Webmin's native UI
+  functions, so the module inherits the active theme (Authentic) exactly:
+  the section navigation is now `ui_links_row` (the same bordered buttons as
+  BIND DNS and other core modules), summary counts use `ui_grid_table`,
+  status words use `ui_text_color`, and notices use `ui_alert_box`. No
+  functional changes.
+
 ## [1.5.1] - 2026-07-24
 
 ### Fixed

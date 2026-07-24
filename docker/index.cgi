@@ -29,13 +29,6 @@ if (!$sum->{'ok'}) {
 		&text('index_daemondown', &html_escape($sum->{'error'} || '')), 'danger');
 	}
 else {
-	# Hero: host + docker version + context.
-	print "<div class='dk-hero'><div class='dk-logo'>&#128051;</div>".
-		"<div><div class='dk-host'>".&html_escape($sum->{'name'} || 'Docker')."</div>".
-		"<div class='dk-sub'>".&text('dash_hero_sub',
-			&html_escape($sum->{'version'} || '?'),
-			&html_escape($config{'docker_context'} || 'default'))."</div></div></div>";
-
 	print &dk_cards([
 		{ 'label' => $text{'dash_running'}, 'value' => $sum->{'running'}, 'level' => 'ok' },
 		{ 'label' => $text{'dash_paused'},  'value' => $sum->{'paused'},  'level' => ($sum->{'paused'} ? 'warn' : '') },
@@ -60,24 +53,25 @@ else {
 			}
 		print &ui_columns_end();
 		}
+	print "<p>".&text('dash_host',
+		"<tt>".&html_escape($sum->{'name'} || '?')."</tt>",
+		"<tt>".&html_escape($sum->{'version'} || '?')."</tt>")."</p>";
 	}
 
 # ---------------------------------------------------------------------------
 # Navigation to the other sections
 # ---------------------------------------------------------------------------
 my @nav = (
-	[ "index.cgi", "&#128230; ".$text{'cont_heading'}, 1 ],
-	[ "images.cgi", "&#128247; ".$text{'nav_images'} ],
-	[ "compose.cgi", "&#129513; ".$text{'nav_compose'} ],
-	[ "storage.cgi", "&#128451; ".$text{'nav_storage'} ],
-	[ "maintenance.cgi", "&#129529; ".$text{'nav_maintenance'} ],
-	[ "security.cgi", "&#128737; ".$text{'nav_security'} ],
-	[ "registry.cgi", "&#128273; ".$text{'nav_registry'} ],
-	[ "contexts.cgi", "&#128260; ".$text{'nav_contexts'} ],
+	&ui_link("images.cgi", $text{'nav_images'}),
+	&ui_link("compose.cgi", $text{'nav_compose'}),
+	&ui_link("storage.cgi", $text{'nav_storage'}),
+	&ui_link("maintenance.cgi", $text{'nav_maintenance'}),
+	&ui_link("security.cgi", $text{'nav_security'}),
+	&ui_link("registry.cgi", $text{'nav_registry'}),
+	&ui_link("contexts.cgi", $text{'nav_contexts'}),
 	);
-push(@nav, [ "proxy.cgi", "&#127760; ".$text{'nav_proxy'} ]) if (&has_virtualmin());
-print "<div class='dk-nav'>".join("", map {
-	"<a href='".$_->[0]."'".($_->[2] ? " class='on'" : "").">".$_->[1]."</a>" } @nav)."</div>";
+push(@nav, &ui_link("proxy.cgi", $text{'nav_proxy'})) if (&has_virtualmin());
+print &ui_links_row(\@nav);
 
 # Reverse-proxy health. Regressions (a domain whose own container moved ports)
 # are actionable and shown prominently with a one-click fix. Not-yet-deployed
@@ -85,24 +79,22 @@ print "<div class='dk-nav'>".join("", map {
 if (&has_virtualmin()) {
 	my $h = &proxy_health();
 	if (@{$h->{'regressed'}}) {
-		print &dk_heading($text{'proxy_health_heading'}, "&#9888;&#65039;");
 		foreach my $r (@{$h->{'regressed'}}) {
-			my $fix = "";
+			my $msg = "<b>".$text{'proxy_health_heading'}."</b><br>".
+				&text('proxy_health_regressed',
+					"<b>".&html_escape($r->{'domain'})."</b>",
+					&dk_badge("port ".$r->{'port'}, 'err'),
+					&dk_badge("port ".$r->{'suggested'}, 'ok'),
+					&html_escape($r->{'container'}));
 			if (&can('proxy')) {
-				$fix = &ui_form_start("act.cgi", "post").
+				$msg .= "<br>".&ui_form_start("act.cgi", "post").
 					&ui_hidden("c", "set_proxy").
 					&ui_hidden("domain", $r->{'domain'}).
 					&ui_hidden("port", $r->{'suggested'}).
 					&ui_submit($text{'proxy_fix_now'}).
 					&ui_form_end();
 			}
-			print "<div class='dk-fixcard'><div>".
-				&text('proxy_health_regressed',
-					"<b>".&html_escape($r->{'domain'})."</b>",
-					&dk_badge("port ".$r->{'port'}, 'err'),
-					&dk_badge("port ".$r->{'suggested'}, 'ok'),
-					&html_escape($r->{'container'})).
-				"</div><div class='dk-fixrow'>".$fix."</div></div>";
+			print &ui_alert_box($msg, 'danger');
 		}
 	}
 	if (@{$h->{'undeployed'}}) {
@@ -110,7 +102,7 @@ if (&has_virtualmin()) {
 			@{$h->{'undeployed'}};
 		print &ui_alert_box(
 			"<b>".&text('proxy_health_undeployed', scalar(@d))."</b><br>".
-			"<span style='opacity:.75'>".join(" &middot; ", @d)."</span>", 'info');
+			join(" &middot; ", @d), 'info');
 	}
 }
 print &ui_hr();

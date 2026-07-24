@@ -56,15 +56,11 @@ $backurl ||= "index.cgi";
 $backlabel ||= $text{'index_return'};
 &ui_print_header(undef, $title, "");
 print &dk_style();
-print "<div class='".($ok ? 'dk-okcard' : 'dk-fixcard')."'>".
-	"<b style='font-size:15px'>".($ok ? "&#9989; " : "&#10060; ").
-	&html_escape($headline)."</b></div>";
+print &ui_alert_box(&html_escape($headline), $ok ? 'success' : 'danger');
 if (defined($body) && $body ne '') {
-	print "<pre class='comment' style='max-height:420px;overflow:auto'>".
-		&html_escape($body)."</pre>";
+	print "<pre class='comment'>".&html_escape($body)."</pre>";
 	}
-print "<p>".&ui_link($backurl, "&larr; ".&html_escape($backlabel))."</p>";
-&ui_print_footer($backurl, $backlabel);
+&ui_print_footer($backurl, $backlabel, "index.cgi", $text{'index_return'});
 exit;
 }
 

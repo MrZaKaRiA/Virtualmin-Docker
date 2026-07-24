@@ -1258,14 +1258,14 @@ return join(" &nbsp; ", @tags);
 sub help_note
 {
 my ($t) = @_;
-return "<div style='opacity:.75;font-size:92%;margin:2px 0 10px 0'>".$t."</div>";
+return "<p><i>".$t."</i></p>";
 }
 
 # danger_note(TEXT) - a red warning line.
 sub danger_note
 {
 my ($t) = @_;
-return "<div style='margin:2px 0 10px 0'>".&ui_text_color($t, 'danger')."</div>";
+return "<p>".&ui_text_color($t, 'danger')."</p>";
 }
 
 # ----------------------------------------------------------------------------
@@ -1936,85 +1936,47 @@ return (0, $env);
 # chosen to read well in both light and dark themes).
 # ----------------------------------------------------------------------------
 
-# dk_style() - the module stylesheet. Emit once per page, right after the
-# header. All selectors are dk- prefixed (clash-proof) and use hardcoded colours
-# that read well in both light and dark themes. Returns '' on later calls.
-sub dk_style
-{
-our $dk_style_done;
-return "" if ($dk_style_done);
-$dk_style_done = 1;
-return <<'CSS';
-<style>
-.dk-hero{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;
-  margin:0 0 14px;border:1px solid rgba(128,128,128,.22);border-radius:14px;
-  background:rgba(128,128,128,.08)}
-.dk-logo{font-size:26px;line-height:1}
-.dk-host{font-weight:600;font-size:15px}
-.dk-sub{opacity:.7;font-size:13px}
-.dk-cards{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px}
-.dk-card{flex:1 1 150px;min-width:140px;border:1px solid rgba(128,128,128,.22);
-  border-radius:14px;padding:14px 16px;background:rgba(128,128,128,.08);
-  display:flex;flex-direction:column;gap:2px}
-.dk-card .dk-n{font-size:32px;font-weight:700;line-height:1.05}
-.dk-card .dk-l{font-size:12px;letter-spacing:.05em;text-transform:uppercase;opacity:.65}
-.dk-card.ok .dk-n{color:#2ea043}.dk-card.ok{border-color:rgba(46,160,67,.35)}
-.dk-card.err .dk-n{color:#e5534b}.dk-card.err{border-color:rgba(229,83,75,.35)}
-.dk-card.warn .dk-n{color:#d9a406}
-.dk-card.info .dk-n{color:#3b82f6}
-.dk-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;
-  font-weight:700;letter-spacing:.02em;white-space:nowrap;vertical-align:middle}
-.dk-badge.ok{background:rgba(46,160,67,.16);color:#2ea043}
-.dk-badge.err{background:rgba(229,83,75,.16);color:#e5534b}
-.dk-badge.warn{background:rgba(217,164,6,.20);color:#b8860b}
-.dk-badge.info{background:rgba(59,130,246,.16);color:#3b82f6}
-.dk-badge.mut{background:rgba(128,128,128,.14);opacity:.8}
-.dk-h{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;
-  margin:20px 0 8px;padding-left:10px;border-left:3px solid #3b82f6}
-.dk-note{opacity:.75;font-size:13px;margin:2px 0 12px}
-.dk-nav{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
-.dk-nav a{display:inline-block;padding:6px 13px;border:1px solid rgba(128,128,128,.22);
-  border-radius:9px;background:rgba(128,128,128,.08);text-decoration:none;font-size:13.5px}
-.dk-nav a:hover{border-color:#3b82f6}
-.dk-nav a.on{background:#3b82f6;color:#fff;border-color:#3b82f6}
-.dk-fixcard{border:1px solid rgba(229,83,75,.5);border-radius:12px;padding:12px 14px;
-  margin:8px 0;background:rgba(229,83,75,.08)}
-.dk-fixrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
-.dk-fixrow form{margin:0}
-.dk-okcard{border:1px solid rgba(46,160,67,.4);border-radius:12px;padding:10px 14px;
-  margin:8px 0;background:rgba(46,160,67,.07)}
-</style>
-CSS
-}
+# The module deliberately ships NO stylesheet of its own: every element is built
+# from Webmin's own UI functions so it inherits the active theme's look exactly.
+# dk_style() is kept as a no-op so page code does not need to change.
+sub dk_style { return ""; }
 
-# dk_badge(LABEL, LEVEL, [RAW]) - a pill badge. LEVEL: ok|err|warn|info|mut.
-# LABEL is HTML-escaped unless RAW is true (for pre-built entity/markup content).
+# dk_badge(LABEL, LEVEL, [RAW]) - a coloured status word using the theme's own
+# colours. LEVEL: ok|err|warn|info|mut -> ui_text_color levels.
 sub dk_badge
 {
 my ($label, $level, $raw) = @_;
 $level ||= 'mut';
-return "<span class='dk-badge ".$level."'>".($raw ? $label : &html_escape($label))."</span>";
+my %map = ('ok' => 'success', 'err' => 'danger', 'warn' => 'warn',
+	   'info' => 'info', 'mut' => undef);
+my $txt = $raw ? $label : &html_escape($label);
+return $map{$level} ? &ui_text_color($txt, $map{$level}) : $txt;
 }
 
-# dk_heading(TEXT, [ICON]) - an accented section heading.
+# dk_heading(TEXT, [ICON]) - a section heading in the theme's own style.
 sub dk_heading
 {
 my ($t, $icon) = @_;
-return "<div class='dk-h'>".($icon ? $icon." " : "").&html_escape($t)."</div>";
+return &ui_subheading($t);
 }
 
-# dk_cards(\@cards) - a row of stat cards. Each: { label, value, level }.
+# dk_cards(\@cards) - the summary counts, using Webmin's own grid table.
+# Each card: { label, value, level }.
 sub dk_cards
 {
 my ($cards) = @_;
-my $h = "<div class='dk-cards'>";
+my @cells;
+my %map = ('ok' => 'success', 'err' => 'danger', 'warn' => 'warn', 'info' => 'info');
 foreach my $c (@$cards) {
-	my $lvl = $c->{'level'} || '';
-	$h .= "<div class='dk-card ".$lvl."'>".
-		"<div class='dk-n'>".&html_escape(defined($c->{'value'}) ? $c->{'value'} : 0)."</div>".
-		"<div class='dk-l'>".&html_escape($c->{'label'})."</div></div>";
+	my $v = defined($c->{'value'}) ? $c->{'value'} : 0;
+	my $lvl = $map{$c->{'level'} || ''};
+	push(@cells, "<font size=+2>".
+		($lvl ? &ui_text_color(&html_escape($v), $lvl) : &html_escape($v)).
+		"</font><br>".&html_escape($c->{'label'}));
 	}
-return $h."</div>";
+my $n = scalar(@cells) || 1;
+return &ui_grid_table(\@cells, $n, 100,
+	[ map { "width=".int(100/$n)."% style='text-align: center'" } (1 .. $n) ]);
 }
 
 # state_dot(STATE) - a coloured status indicator.
@@ -2038,10 +2000,11 @@ my $badge = &dk_badge($state ne '' ? $state : '?', $lvl);
 my $extra = '';
 if (defined($status)) {
 	# Pull out a healthy/unhealthy hint and drop the leading state word.
-	$extra = " ".&dk_badge('healthy', 'ok') if ($status =~ /\(healthy\)/);
-	$extra = " ".&dk_badge('unhealthy', 'err') if ($status =~ /\(unhealthy\)/);
+	my $health = '';
+	$health = " ".&dk_badge('healthy', 'ok') if ($status =~ /\(healthy\)/);
+	$health = " ".&dk_badge('unhealthy', 'err') if ($status =~ /\(unhealthy\)/);
 	my $s = $status; $s =~ s/\s*\((un)?healthy\)//;
-	$extra = "<span style='opacity:.7;font-size:12px'> ".&html_escape($s)."</span>".$extra;
+	$extra = " ".&html_escape($s).$health;
 	}
 return $badge.$extra;
 }
