@@ -10,8 +10,15 @@ with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 [![Webmin module](https://img.shields.io/badge/Webmin-module-FF6600.svg)](https://webmin.com)
 [![Virtualmin](https://img.shields.io/badge/Virtualmin-integrated-2E7D32.svg)](https://virtualmin.com)
-[![Version](https://img.shields.io/badge/version-1.4.0-success.svg)](CHANGELOG.md)
+[![Latest release](https://img.shields.io/github/v/release/MrZaKaRiA/Virtualmin-Docker?label=version&color=success)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/MrZaKaRiA/Virtualmin-Docker/total?color=blue)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases)
 [![Hardened](https://img.shields.io/badge/shell--injection-hardened-brightgreen.svg)](#-security-model)
+
+### [⬇️ Download the latest module (`docker.wbm.gz`)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz)
+
+**Current release: [v1.5.2](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/tag/v1.5.2)** ·
+[direct link](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.2/docker.wbm.gz) ·
+[all releases](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases)
 
 </div>
 
@@ -149,11 +156,35 @@ This is the whole reason the module exists.
 
 ## ⚙️ Installation
 
-1. Download **`docker.wbm.gz`** from the [latest release](../../releases/latest).
+**Option 1 — install straight from the URL (fastest).**
+In Webmin go to **Webmin Configuration → Webmin Modules**, choose
+**From ftp or http URL**, paste this, and click **Install Module**:
+
+```
+https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz
+```
+
+To pin an exact version instead, use the versioned URL:
+
+```
+https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.2/docker.wbm.gz
+```
+
+**Option 2 — download, then upload.**
+1. Download **[`docker.wbm.gz` (latest)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz)**.
 2. In Webmin go to **Webmin Configuration → Webmin Modules → From uploaded file**,
    choose the package, and click **Install Module**.
-3. Open it under **Servers → Docker**. The dashboard widget appears once the
-   **System and Server Status** module is installed and enabled.
+
+**Option 3 — from the shell:**
+
+```sh
+wget https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz
+/usr/share/webmin/install-module.pl docker.wbm.gz
+```
+
+Then open it under **Servers → Docker**. The dashboard widget appears once the
+**System and Server Status** module is installed and enabled. Upgrading is the
+same procedure — your settings and per-user ACLs are preserved.
 
 Build it yourself from a checkout:
 
