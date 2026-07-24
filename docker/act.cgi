@@ -40,9 +40,31 @@ sub render
 {
 my ($title, $output) = @_;
 &ui_print_header(undef, $title, "");
+print &dk_style();
 print "<pre class='comment'>".&html_escape($output)."</pre>";
 &ui_print_footer("index.cgi", $text{'index_return'});
 print "<script type='text/javascript'>if (window.viewer_init) { viewer_init() }</script>";
+exit;
+}
+
+# render_status(TITLE, OK?, HEADLINE, BODY, BACKURL, BACKLABEL) - a result page
+# with a green success card or red failure card, plus optional detail output.
+sub render_status
+{
+my ($title, $ok, $headline, $body, $backurl, $backlabel) = @_;
+$backurl ||= "index.cgi";
+$backlabel ||= $text{'index_return'};
+&ui_print_header(undef, $title, "");
+print &dk_style();
+print "<div class='".($ok ? 'dk-okcard' : 'dk-fixcard')."'>".
+	"<b style='font-size:15px'>".($ok ? "&#9989; " : "&#10060; ").
+	&html_escape($headline)."</b></div>";
+if (defined($body) && $body ne '') {
+	print "<pre class='comment' style='max-height:420px;overflow:auto'>".
+		&html_escape($body)."</pre>";
+	}
+print "<p>".&ui_link($backurl, "&larr; ".&html_escape($backlabel))."</p>";
+&ui_print_footer($backurl, $backlabel);
 exit;
 }
 
@@ -53,6 +75,7 @@ sub confirm
 my ($title, $prompt, $hidden, $button, $level, $detail) = @_;
 return if ($in{'confirmed'} || !$config{'confirm_destructive'});
 &ui_print_header(undef, $title, "");
+print &dk_style();
 print &ui_alert_box(&html_escape($prompt), $level || 'warn');
 if (defined($detail) && $detail ne '') {
 	print &ui_subheading($text{'confirm_details'});
@@ -433,9 +456,9 @@ elsif ($c eq 'set_proxy') {
 	my ($f, $o) = &set_domain_proxy($in{'domain'}, $url);
 	&webmin_log("proxy", "domain", $in{'domain'}, { 'url' => $url }) if (!$f);
 	# Always show what actually happened - proxy changes fail silently too easily.
-	my $head = $f ? &text('proxy_fail', &html_escape($in{'domain'}))
-		      : &text('proxy_done', &html_escape($in{'domain'}));
-	&render($text{'proxy_title'}, $head."\n\n".$o);
+	&render_status($text{'proxy_title'}, !$f,
+		&text($f ? 'proxy_fail' : 'proxy_done', $in{'domain'}),
+		$o, "proxy.cgi", $text{'nav_proxy'});
 	}
 elsif ($c eq 'connect_domain') {
 	# Repoint a domain at THIS container's published port (from container page).
@@ -444,9 +467,9 @@ elsif ($c eq 'connect_domain') {
 	$in{'port'} =~ /^\d{1,5}$/ || &error($text{'proxy_err_port'});
 	my ($f, $o) = &set_domain_proxy($in{'domain'}, "http://localhost:".$in{'port'}."/");
 	&webmin_log("proxy", "domain", $in{'domain'}, { 'port' => $in{'port'} }) if (!$f);
-	my $head = $f ? &text('proxy_fail', &html_escape($in{'domain'}))
-		      : &text('proxy_done', &html_escape($in{'domain'}));
-	&render($text{'proxy_title'}, $head."\n\n".$o);
+	&render_status($text{'proxy_title'}, !$f,
+		&text($f ? 'proxy_fail' : 'proxy_done', $in{'domain'}),
+		$o, "proxy.cgi", $text{'nav_proxy'});
 	}
 
 # ---- networks (connect / disconnect a container) ---------------------------

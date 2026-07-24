@@ -12,6 +12,7 @@ my $project = $in{'project'};
 &is_valid_name($project) || &error($text{'update_err_noproject'});
 
 &ui_print_header(undef, &text('env_title', &html_escape($project)), "");
+print &dk_style();
 
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});

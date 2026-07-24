@@ -7,6 +7,7 @@ require './docker-lib.pl';
 our (%config, %text, %in);
 
 &ui_print_header(undef, $text{'sec_title'}, "");
+print &dk_style();
 
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});

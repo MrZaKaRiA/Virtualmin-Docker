@@ -11,6 +11,7 @@ our (%config, %text, %in, %access);
 my $id = $in{'id'};
 &is_valid_ref($id) || do {
 	&ui_print_header(undef, $text{'cont_title_unknown'}, "");
+print &dk_style();
 	print &ui_alert_box($text{'err_badref'}, 'danger');
 	&ui_print_footer("index.cgi", $text{'index_return'});
 	exit;
@@ -20,6 +21,7 @@ my $id = $in{'id'};
 my ($nf, $name, $nerr) = &run_docker('container inspect --format "{{.Name}}" '.&sq($id), undef, 1);
 if ($nf) {
 	&ui_print_header(undef, $text{'cont_title_unknown'}, "");
+print &dk_style();
 	print &ui_alert_box(&html_escape($nerr || $name || $text{'err_badref'}), 'danger');
 	&ui_print_footer("index.cgi", $text{'index_return'});
 	exit;
@@ -37,6 +39,7 @@ if (($in{'tab'} || '') eq 'log' && $in{'download'}) {
 	}
 
 &ui_print_header(undef, &text('cont_title', &html_escape($disp)), "");
+print &dk_style();
 
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});

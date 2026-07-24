@@ -8,6 +8,7 @@ our (%config, %text, %in, %access);
 %access = &get_module_acl();
 
 &ui_print_header(undef, $text{'compose_title'}, "");
+print &dk_style();
 
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});

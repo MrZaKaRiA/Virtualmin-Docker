@@ -10,6 +10,7 @@ our (%config, %text, %in, %access);
 %access = &get_module_acl();
 
 &ui_print_header(undef, $text{'proxy_title'}, "");
+print &dk_style();
 
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});
@@ -67,15 +68,15 @@ else {
 		my ($state, $form) = ("", "");
 
 		if (!$local) {
-			$state = &ui_text_color($text{'proxy_external'}, 'info');
+			$state = &dk_badge($text{'proxy_external'}, 'info');
 			}
 		elsif ($live{$port}) {
-			$state = &ui_text_color("&#10003; ".&text('proxy_ok', &html_escape($live{$port})), 'success');
+			$state = &dk_badge("&#10003; ".&text('proxy_ok', &html_escape($live{$port})), 'ok', 1);
 			}
 		elsif ($own) {
 			# Regressed: its own container is on a different port. One-click fix.
-			$state = &ui_text_color("&#9888; ".&text('proxy_regressed',
-				$own->{'port'}, &html_escape($own->{'container'})), 'danger');
+			$state = &dk_badge("&#9888; ".&text('proxy_regressed',
+				$own->{'port'}, &html_escape($own->{'container'})), 'err', 1);
 			if (&can('proxy')) {
 				$form = &ui_form_start("act.cgi", "post").
 					&ui_hidden("c", "set_proxy").
@@ -87,7 +88,7 @@ else {
 			}
 		else {
 			# No running container for this domain - not deployed.
-			$state = &ui_text_color("&#9679; ".&text('proxy_undeployed', $port), 'warn');
+			$state = &dk_badge("&#9679; ".&text('proxy_undeployed', $port), 'warn', 1);
 			}
 
 		# Fallback manual selector (any running container) for local rows that

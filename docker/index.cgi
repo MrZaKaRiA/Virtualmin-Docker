@@ -10,6 +10,7 @@ our (%config, %text, %in, %access);
 %access = &get_module_acl();
 
 &ui_print_header(undef, $text{'index_title'}, "", undef, 1, 1);
+print &dk_style();
 
 if (!&has_command('docker')) {
 	&ui_print_endpage($text{'index_notinstalled'});
@@ -18,9 +19,6 @@ if (!&has_command('docker')) {
 # Feedback from act.cgi redirects.
 print &ui_alert_box(&html_escape($in{'msg'}), 'success') if ($in{'msg'});
 print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});
-if ($config{'docker_context'}) {
-	print &ui_alert_box(&text('index_context', &html_escape($config{'docker_context'})), 'info');
-	}
 
 # ---------------------------------------------------------------------------
 # Dashboard summary
@@ -31,17 +29,24 @@ if (!$sum->{'ok'}) {
 		&text('index_daemondown', &html_escape($sum->{'error'} || '')), 'danger');
 	}
 else {
-	my @cells;
-	push(@cells, &dash_cell($text{'dash_running'}, $sum->{'running'}, 'success'));
-	push(@cells, &dash_cell($text{'dash_paused'},  $sum->{'paused'},  'warn'));
-	push(@cells, &dash_cell($text{'dash_stopped'}, $sum->{'stopped'}, 'danger'));
-	push(@cells, &dash_cell($text{'dash_images'},  $sum->{'images'},  'info'));
-	print &ui_grid_table(\@cells, 4, 100,
-		[ map { "width=25% style='text-align:center'" } (1..4) ]);
+	# Hero: host + docker version + context.
+	print "<div class='dk-hero'><div class='dk-logo'>&#128051;</div>".
+		"<div><div class='dk-host'>".&html_escape($sum->{'name'} || 'Docker')."</div>".
+		"<div class='dk-sub'>".&text('dash_hero_sub',
+			&html_escape($sum->{'version'} || '?'),
+			&html_escape($config{'docker_context'} || 'default'))."</div></div></div>";
+
+	print &dk_cards([
+		{ 'label' => $text{'dash_running'}, 'value' => $sum->{'running'}, 'level' => 'ok' },
+		{ 'label' => $text{'dash_paused'},  'value' => $sum->{'paused'},  'level' => ($sum->{'paused'} ? 'warn' : '') },
+		{ 'label' => $text{'dash_stopped'}, 'value' => $sum->{'stopped'}, 'level' => ($sum->{'stopped'} ? 'err' : '') },
+		{ 'label' => $text{'dash_images'},  'value' => $sum->{'images'},  'level' => 'info' },
+		]);
 
 	# Disk usage from "docker system df".
 	my ($dffail, $df) = &system_df();
 	if (!$dffail && @$df) {
+		print &dk_heading($text{'maint_df'}, "&#128190;");
 		print &ui_columns_start([ $text{'dash_type'}, $text{'dash_total'},
 			$text{'dash_active'}, $text{'dash_size'}, $text{'dash_reclaim'} ], 100);
 		foreach my $r (@$df) {
@@ -55,25 +60,24 @@ else {
 			}
 		print &ui_columns_end();
 		}
-	print "<p>".&text('dash_host',
-		&html_escape($sum->{'name'} || '?'),
-		&html_escape($sum->{'version'} || '?'))."</p>";
 	}
 
 # ---------------------------------------------------------------------------
 # Navigation to the other sections
 # ---------------------------------------------------------------------------
 my @nav = (
-	&ui_link("images.cgi", $text{'nav_images'}),
-	&ui_link("compose.cgi", $text{'nav_compose'}),
-	&ui_link("storage.cgi", $text{'nav_storage'}),
-	&ui_link("maintenance.cgi", $text{'nav_maintenance'}),
-	&ui_link("security.cgi", $text{'nav_security'}),
-	&ui_link("registry.cgi", $text{'nav_registry'}),
-	&ui_link("contexts.cgi", $text{'nav_contexts'}),
+	[ "index.cgi", "&#128230; ".$text{'cont_heading'}, 1 ],
+	[ "images.cgi", "&#128247; ".$text{'nav_images'} ],
+	[ "compose.cgi", "&#129513; ".$text{'nav_compose'} ],
+	[ "storage.cgi", "&#128451; ".$text{'nav_storage'} ],
+	[ "maintenance.cgi", "&#129529; ".$text{'nav_maintenance'} ],
+	[ "security.cgi", "&#128737; ".$text{'nav_security'} ],
+	[ "registry.cgi", "&#128273; ".$text{'nav_registry'} ],
+	[ "contexts.cgi", "&#128260; ".$text{'nav_contexts'} ],
 	);
-push(@nav, &ui_link("proxy.cgi", $text{'nav_proxy'})) if (&has_virtualmin());
-print "<p>".join(" &nbsp;|&nbsp; ", @nav)."</p>";
+push(@nav, [ "proxy.cgi", "&#127760; ".$text{'nav_proxy'} ]) if (&has_virtualmin());
+print "<div class='dk-nav'>".join("", map {
+	"<a href='".$_->[0]."'".($_->[2] ? " class='on'" : "").">".$_->[1]."</a>" } @nav)."</div>";
 
 # Reverse-proxy health. Regressions (a domain whose own container moved ports)
 # are actionable and shown prominently with a one-click fix. Not-yet-deployed
@@ -81,31 +85,32 @@ print "<p>".join(" &nbsp;|&nbsp; ", @nav)."</p>";
 if (&has_virtualmin()) {
 	my $h = &proxy_health();
 	if (@{$h->{'regressed'}}) {
-		my $msg = "<b>".$text{'proxy_health_heading'}."</b>";
+		print &dk_heading($text{'proxy_health_heading'}, "&#9888;&#65039;");
 		foreach my $r (@{$h->{'regressed'}}) {
 			my $fix = "";
 			if (&can('proxy')) {
-				$fix = " ".&ui_form_start("act.cgi", "post").
+				$fix = &ui_form_start("act.cgi", "post").
 					&ui_hidden("c", "set_proxy").
 					&ui_hidden("domain", $r->{'domain'}).
 					&ui_hidden("port", $r->{'suggested'}).
 					&ui_submit($text{'proxy_fix_now'}).
 					&ui_form_end();
 			}
-			$msg .= "<div style='margin-top:6px'>".
+			print "<div class='dk-fixcard'><div>".
 				&text('proxy_health_regressed',
 					"<b>".&html_escape($r->{'domain'})."</b>",
-					$r->{'port'}, $r->{'suggested'},
-					&html_escape($r->{'container'})).$fix."</div>";
+					&dk_badge("port ".$r->{'port'}, 'err'),
+					&dk_badge("port ".$r->{'suggested'}, 'ok'),
+					&html_escape($r->{'container'})).
+				"</div><div class='dk-fixrow'>".$fix."</div></div>";
 		}
-		print &ui_alert_box($msg, 'danger');
 	}
 	if (@{$h->{'undeployed'}}) {
 		my @d = map { &html_escape($_->{'domain'})." (".$_->{'port'}.")" }
 			@{$h->{'undeployed'}};
 		print &ui_alert_box(
-			&text('proxy_health_undeployed', scalar(@d))."<br>".
-			"<span style='opacity:.8'>".join(", ", @d)."</span>", 'info');
+			"<b>".&text('proxy_health_undeployed', scalar(@d))."</b><br>".
+			"<span style='opacity:.75'>".join(" &middot; ", @d)."</span>", 'info');
 	}
 }
 print &ui_hr();
@@ -239,13 +244,3 @@ if (&can('create')) {
 
 # Re-enable code highlighting if the theme supports it.
 print "<script type='text/javascript'>if (window.viewer_init) { viewer_init() }</script>";
-
-# dash_cell(LABEL, VALUE, LEVEL) - a big coloured number for the summary grid.
-sub dash_cell
-{
-my ($label, $value, $level) = @_;
-$value = 0 if (!defined($value));
-return "<div style='font-size:200%'>".
-	&ui_text_color(&html_escape($value), $level)."</div>".
-	"<div>".&html_escape($label)."</div>";
-}

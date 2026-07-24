@@ -15,6 +15,7 @@ my ($pf, $p) = &find_compose_project($project);
 $pf && &error(&html_escape($p));
 
 &ui_print_header(undef, &text('update_title2', &html_escape($project)), "");
+print &dk_style();
 
 # What will happen, in plain words.
 print &ui_subheading($text{'update_what'});

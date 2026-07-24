@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-07-24
+
+### Fixed
+- **Proxy reconnect 500 error** ("Can't use string as a subroutine ref"): a
+  coderef was called as `&$run->()` instead of `$run->()`. Fixed and verified;
+  the "Fix now" button and manual proxy form now work.
+
+### Changed
+- **Full visual redesign** for a polished, non-technical-friendly UI: a host
+  hero header, rounded stat cards (running/paused/stopped/images), pill status
+  badges (running / healthy / exited) in the container list, accented section
+  headings, an icon nav bar, red "fix cards" for broken proxies with the exact
+  port badges, and a green/red result page for proxy changes showing the exact
+  command output. Theme-safe (light & dark), applied across every page, and
+  fully self-scoped (`dk-` classes) so it never clashes with the Webmin theme.
+
 ## [1.4.2] - 2026-07-23
 
 ### Fixed

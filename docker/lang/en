@@ -15,6 +15,7 @@ dash_active=Active
 dash_size=Size
 dash_reclaim=Reclaimable
 dash_host=Host $1 running Docker $2
+dash_hero_sub=Docker $1 &middot; context: $2
 
 nav_images=Images
 nav_compose=Compose
@@ -338,7 +339,7 @@ proxy_fail=FAILED to update the proxy for $1. Details below (this is the exact v
 proxy_err_domain=Invalid domain name
 proxy_err_port=Invalid port
 proxy_health_heading=Website needs reconnecting: a domain's app moved to a different port
-proxy_health_regressed=$1 points at port $2, but its app ($4) is now running on port $3.
+proxy_health_regressed=$1 is pointing at $2, but its app ($4) is now running on $3.
 proxy_health_undeployed=$1 more domain(s) proxy to services that are not running yet (deploy them, or ignore if planned):
 proxy_fix_now=Fix now
 proxy_health_fix=Open Domains &amp; Proxies to reconnect
