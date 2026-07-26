@@ -50,8 +50,6 @@ management that fits right in — under **Servers → Docker**.
 
 ## 📸 Screenshots
 
-> Drop your own PNGs into `docs/screenshots/` — they'll render here.
-
 | Dashboard & containers | Home-screen widget |
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Widget](docs/screenshots/widget.png) |
