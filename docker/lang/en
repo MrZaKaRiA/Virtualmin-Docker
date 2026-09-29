@@ -275,6 +275,7 @@ acl_backup=Can back up and restore (save / load / commit / export)?
 acl_proxy=Can manage Virtualmin website proxies (reconnect domains to containers)?
 acl_registry=Can log in to registries?
 acl_context=Can switch the Docker context?
+acl_host_mount=Can mount host paths into containers? This is equivalent to host-root access.
 
 monitor_docker_up=Docker Up
 monitor_container_up=Docker Container Up

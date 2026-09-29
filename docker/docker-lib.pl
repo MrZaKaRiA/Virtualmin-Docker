@@ -103,6 +103,14 @@ my ($v) = @_;
 return defined($v) && $v !~ /[\0\n\r]/ && $v ne '' && $v !~ /^-/;
 }
 
+sub volume_mount_uses_host_path
+{
+my ($mount) = @_;
+return 0 if (!defined($mount));
+my ($source) = split(/:/, $mount, 2);
+return $source =~ m![/\\]! || $source =~ /^~|^\.\.?$/;
+}
+
 # require_ref(REF) - validate a container reference or abort the request.
 sub require_ref
 {
@@ -452,6 +460,8 @@ foreach my $p (@{$opts->{'ports'} || []}) {
 	}
 foreach my $v (@{$opts->{'volumes'} || []}) {
 	&is_clean_token($v) || return (1, "Invalid volume: $v");
+	return (1, "Host bind mounts require the host_mount permission")
+		if (&volume_mount_uses_host_path($v) && !&can('host_mount'));
 	push(@cmd, '--volume', &sq($v));
 	}
 if ($opts->{'hardened'}) {
