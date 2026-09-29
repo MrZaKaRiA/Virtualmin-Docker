@@ -253,8 +253,11 @@ The widget needs the **System and Server Status** module to be installed, and
 
 Under **Webmin Users → _user_ → Docker**, grant or deny each capability
 independently: **view · manage · create · delete · exec · prune · backup ·
-registry · context**. The default grant is **full access** (you're the admin) —
-tighten it per-user as needed.
+registry · context · host mounts**. Host mounts are denied by default. Grant
+**host mounts** only to fully trusted administrators: a Docker bind mount can
+expose or modify the host filesystem, making this permission equivalent to
+host-root access. Docker named volumes remain available to users with
+**create** permission.
 
 ## 🧩 Rootless Docker
 
