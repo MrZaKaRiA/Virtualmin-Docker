@@ -2,7 +2,10 @@
 # Per-user access control for the Docker module. Admins can grant or deny each
 # capability independently via Webmin Users -> (user) -> Docker.
 
-do './docker-lib.pl';
+# Loaded by Webmin's foreign_require() from OTHER modules' directories, so
+# the lib must be found via @INC (which foreign_require primes with this
+# module's directory). Never use a './' relative path here - see issues #1, #2.
+require 'docker-lib.pl';
 
 my @acl_keys = qw(view manage create delete exec prune backup proxy registry context);
 
