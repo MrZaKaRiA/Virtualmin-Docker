@@ -47,11 +47,13 @@ print "<script type='text/javascript'>if (window.viewer_init) { viewer_init() }<
 exit;
 }
 
-# render_status(TITLE, OK?, HEADLINE, BODY, BACKURL, BACKLABEL) - a result page
-# with a green success card or red failure card, plus optional detail output.
+# render_status(TITLE, OK?, HEADLINE, BODY, BACKURL, BACKLABEL, [EXTRA]) - a
+# result page with a green success card or red failure card, plus optional
+# detail output. EXTRA is optional, pre-escaped HTML shown below the output
+# (for example "what to do next" links).
 sub render_status
 {
-my ($title, $ok, $headline, $body, $backurl, $backlabel) = @_;
+my ($title, $ok, $headline, $body, $backurl, $backlabel, $extra) = @_;
 $backurl ||= "index.cgi";
 $backlabel ||= $text{'index_return'};
 &ui_print_header(undef, $title, "");
@@ -60,6 +62,7 @@ print &ui_alert_box(&html_escape($headline), $ok ? 'success' : 'danger');
 if (defined($body) && $body ne '') {
 	print "<pre class='comment'>".&html_escape($body)."</pre>";
 	}
+print $extra if (defined($extra) && $extra ne '');
 &ui_print_footer($backurl, $backlabel, "index.cgi", $text{'index_return'});
 exit;
 }
@@ -119,12 +122,14 @@ if ($c eq 'container_bulk') {
 			$text{'act_remove'}, 'danger');
 		my ($f, $o) = &remove_container(\@ids, 1, 0);
 		&webmin_log("remove", "container", join(",", @ids)) if (!$f);
+		&clear_summary_cache() if (!$f);
 		&redir("index.cgi", $f ? undef : $text{'msg_removed'}, $f ? $o : undef);
 		}
 	else {
 		&require_acl('manage');
 		my ($f, $o) = &container_action($action, \@ids);
 		&webmin_log($action, "container", join(",", @ids)) if (!$f);
+		&clear_summary_cache() if (!$f);
 		&redir("index.cgi", $f ? undef : &text('msg_action', $action),
 			$f ? $o : undef);
 		}
@@ -147,6 +152,7 @@ elsif ($c eq 'create' || $c eq 'run_image') {
 	my ($f, $o) = &create_container(\%opts);
 	&webmin_log("create", "container", $in{'name'} || $in{'image'},
 		{ 'image' => $in{'image'} }) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&redir($c eq 'run_image' ? "images.cgi" : "index.cgi",
 		$f ? undef : $text{'msg_created'}, $f ? $o : undef);
 	}
@@ -154,6 +160,7 @@ elsif ($c eq 'clone') {
 	&require_acl('create');
 	my ($f, $o) = &clone_container($in{'source'}, $in{'name'});
 	&webmin_log("clone", "container", $in{'source'}) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&redir("index.cgi", $f ? undef : $text{'msg_cloned'}, $f ? $o : undef);
 	}
 elsif ($c eq 'rename') {
@@ -208,12 +215,14 @@ elsif ($c eq 'image_remove') {
 		$text{'img_remove'}, 'danger');
 	my ($f, $o) = &remove_image(\@ids, $in{'force'});
 	&webmin_log("remove", "image", join(",", @ids)) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&redir("images.cgi", $f ? undef : $text{'msg_image_removed'}, $f ? $o : undef);
 	}
 elsif ($c eq 'pull') {
 	&require_acl('create');
 	my ($f, $o) = &pull_image($in{'image'});
 	&webmin_log("pull", "image", $in{'image'}) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&render($text{'img_pull'}, $o);
 	}
 elsif ($c eq 'push') {
@@ -241,6 +250,7 @@ elsif ($c eq 'prune_images') {
 		&prune_preview_html({ 'dangling' => 1, 'allimages' => $in{'all'} }));
 	my ($f, $o) = &prune_images($in{'all'});
 	&webmin_log("prune", "image", "*") if (!$f);
+	&clear_summary_cache() if (!$f);
 	&render($text{'img_prune'}, $o);
 	}
 
@@ -356,6 +366,7 @@ elsif ($c eq 'system_prune') {
 	my ($f, $o) = &system_prune($in{'all'}, $in{'volumes'});
 	&webmin_log("prune", "system", "*",
 		{ 'all' => $in{'all'}, 'volumes' => $in{'volumes'} }) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&render($text{'maint_system_prune'}, $o);
 	}
 elsif ($c eq 'builder_prune') {
@@ -398,6 +409,7 @@ elsif ($c eq 'compose') {
 		}
 	&webmin_log("compose", "project", $in{'compose_file'},
 		{ 'action' => $in{'action'} }) if (!$f);
+	&clear_summary_cache() if (!$f);
 	&render($text{'compose_heading'}, $o eq '' ? $text{'exec_nooutput'} : $o);
 	}
 elsif ($c eq 'compose_project') {
@@ -430,12 +442,68 @@ elsif ($c eq 'compose_project') {
 		}
 	my ($f, $o) = &compose_project_action($project, $paction);
 	&webmin_log($paction, "compose", $project) if (!$f);
+	&clear_summary_cache() if (!$f);
 	if ($f) {
 		&redir("compose.cgi", undef,
 			length($o) > 500 ? substr($o, 0, 500)."..." : $o);
 		}
 	&render(&text('compose_result', $project),
 		$o eq '' ? $text{'exec_nooutput'} : $o);
+	}
+elsif ($c eq 'newproj') {
+	# Guided deploy: create the folder + files, validate, optionally start.
+	&require_acl('create');
+	my $project = $in{'project'};
+	$project =~ s/^\s+|\s+$//g if (defined($project));
+	&is_valid_project_name($project) || &error($text{'newproj_err_name'});
+	($in{'compose'} || '') =~ /\S/ || &error($text{'newproj_err_empty'});
+	my ($domain, $custom);
+	my $loc = defined($in{'location'}) ? $in{'location'} : '';
+	if ($loc ne '' && $loc ne 'custom') {
+		&is_valid_domain($loc) || &error($text{'newproj_err_domain'});
+		$domain = $loc;
+		}
+	else {
+		$custom = $in{'dir'};
+		}
+	my ($df, $dir, $uid, $gid) = &new_project_dir($project, $domain, $custom);
+	if ($df) {
+		&render_status($text{'newproj_title'}, 0,
+			&text('newproj_fail', $project), $dir,
+			"compose.cgi", $text{'newproj_back'});
+		}
+	my ($cf, $co, $file) = &create_compose_project($project, $dir,
+		$in{'compose'}, $in{'env'}, $uid, $gid);
+	if ($cf) {
+		&render_status($text{'newproj_title'}, 0,
+			&text('newproj_fail', $project), $co,
+			"compose.cgi", $text{'newproj_back'});
+		}
+	&webmin_log("create", "compose", $project, { 'dir' => $dir });
+	my $body = &text('newproj_body_dir', $dir)."\n".
+		   &text('newproj_body_file', $file)."\n";
+	$body .= &text('newproj_body_env', $dir."/.env")."\n"
+		if (-e $dir."/.env");
+	my ($ok, $headline) = (1, &text('newproj_done', $project));
+	if ($in{'start'}) {
+		my ($sf, $so) = &start_compose_project($project, $file);
+		$body .= "\n".($so eq '' ? $text{'exec_nooutput'} : $so);
+		if ($sf) {
+			($ok, $headline) = (0, &text('newproj_start_fail', $project));
+			}
+		else {
+			&webmin_log("up", "compose", $project);
+			&clear_summary_cache();
+			$headline = &text('newproj_done_started', $project);
+			}
+		}
+	# Plain-language next steps, with the proxy page when Virtualmin is here.
+	my $extra = "<p>".&ui_link("compose.cgi", $text{'newproj_goto_compose'})."</p>";
+	$extra .= "<p>".&text('newproj_next',
+			&ui_link("proxy.cgi", $text{'newproj_next_link'}))."</p>"
+		if (&has_virtualmin());
+	&render_status($text{'newproj_title'}, $ok, $headline, $body,
+		"compose.cgi", $text{'newproj_back'}, $extra);
 	}
 
 # ---- Virtualmin proxy management -------------------------------------------

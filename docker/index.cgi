@@ -146,6 +146,15 @@ else {
 	print &ui_form_start("act.cgi", "post", undef, "id='contform'");
 	print &ui_hidden("c", "container_bulk");
 	print &bulk_select_links('contform', 'd')."<br>\n";
+
+	# Client-side text filter for the table below. The input has no name so
+	# it is never POSTed with the bulk form; the counter format string is
+	# carried in a data attribute so the script needs no interpolation.
+	print "<p>".$text{'ux_filter'}." ".
+		"<input type='text' id='ux_filter' size='30' autocomplete='off'> ".
+		"<span id='ux_filter_count' data-fmt='".
+		&html_escape($text{'ux_filter_count'})."'></span></p>\n";
+	print "<div id='dk-contlist'>\n";
 	print &ui_columns_start([
 		"", $text{'cont_name'}, $text{'cont_status'}, $text{'cont_image'},
 		$text{'cont_ports'}, $text{'cont_proxy'},
@@ -179,6 +188,61 @@ else {
 			], undef, "d", $c->{'id'});
 		}
 	print &ui_columns_end();
+	print "</div>\n";
+
+	# Filter rows on input, remember the last filter per browser, and
+	# untick containers that are filtered out so a bulk action never hits
+	# a row the user cannot see. Header rows (Webmin: tr.ui_columns_heads
+	# with <td><b>; Authentic: <thead><tr><th>) are skipped.
+	print <<'EOJS';
+<script type="text/javascript">
+(function() {
+  var inp = document.getElementById('ux_filter');
+  var cnt = document.getElementById('ux_filter_count');
+  var box = document.getElementById('dk-contlist');
+  if (!inp || !box) { return; }
+  var KEY = 'docker_cont_filter';
+  function rows() {
+    var all = box.querySelectorAll('table tr'), out = [];
+    for (var i = 0; i < all.length; i++) {
+      var tr = all[i];
+      if (tr.querySelector('th')) { continue; }
+      if (tr.parentNode && tr.parentNode.tagName === 'THEAD') { continue; }
+      if (/\bui_columns_head(s|ing)\b/.test(tr.className || '')) { continue; }
+      out.push(tr);
+    }
+    return out;
+  }
+  function apply() {
+    var q = (inp.value || '').toLowerCase(), rs = rows(), shown = 0;
+    for (var i = 0; i < rs.length; i++) {
+      var txt = (rs[i].textContent || '').toLowerCase();
+      var hit = (q === '' || txt.indexOf(q) !== -1);
+      rs[i].style.display = hit ? '' : 'none';
+      if (hit) { shown++; }
+      else {
+        var cb = rs[i].querySelector("input[type='checkbox']");
+        if (cb) { cb.checked = false; }
+      }
+    }
+    if (cnt) {
+      var fmt = cnt.getAttribute('data-fmt') || '';
+      cnt.textContent = (q === '') ? '' :
+        fmt.replace('$1', shown).replace('$2', rs.length);
+    }
+    try { if (q === '') { localStorage.removeItem(KEY); }
+          else { localStorage.setItem(KEY, inp.value); } } catch (e) { }
+  }
+  inp.addEventListener('input', apply);
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); }
+  });
+  try { var saved = localStorage.getItem(KEY);
+        if (saved) { inp.value = saved; } } catch (e) { }
+  apply();
+})();
+</script>
+EOJS
 
 	# Action buttons - gated by ACL.
 	my @buttons;

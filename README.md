@@ -16,8 +16,8 @@ with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 
 ### [⬇️ Download the latest module (`docker.wbm.gz`)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz)
 
-**Current release: [v1.5.3](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/tag/v1.5.3)** ·
-[direct link](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.3/docker.wbm.gz) ·
+**Current release: [v1.6.0](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/tag/v1.6.0)** ·
+[direct link](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.6.0/docker.wbm.gz) ·
 [all releases](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases)
 
 </div>
@@ -157,7 +157,7 @@ the latest release, checks the archive and installs it with Webmin's own
 curl -fsSLO https://raw.githubusercontent.com/MrZaKaRiA/Virtualmin-Docker/main/install.sh && sudo sh install.sh
 ```
 
-`sudo sh install.sh v1.5.3` pins a specific version, and
+`sudo sh install.sh v1.6.0` pins a specific version, and
 `sudo sh install.sh --uninstall` removes the module again. Re-running the
 script upgrades in place.
 
@@ -172,7 +172,7 @@ https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.w
 To pin an exact version instead, use the versioned URL:
 
 ```
-https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.3/docker.wbm.gz
+https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.6.0/docker.wbm.gz
 ```
 
 **Option 2 — download, then upload.**
@@ -218,7 +218,7 @@ on the Webmin home page or on Virtualmin's support pages.
 Both are the same bug in **v1.5.2 and earlier**: the module's hook files
 (`acl_security.pl`, `system_info.pl`, …) loaded the module library with a
 path relative to the working directory, which fails when Webmin loads them
-from another module. **Fixed in v1.5.3** — upgrade with any of the install
+from another module. **Fixed in v1.6.0** — upgrade with any of the install
 options above; your settings and ACLs are kept.
 
 **`permission denied while trying to connect to the Docker daemon socket`.**

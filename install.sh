@@ -4,7 +4,7 @@
 #
 # Usage (as root):
 #   sh install.sh               install or upgrade to the latest release
-#   sh install.sh v1.5.3        install or upgrade to a specific release tag
+#   sh install.sh v1.6.0        install or upgrade to a specific release tag
 #   sh install.sh --uninstall   remove the module
 #
 # Upgrading is the same as installing: Webmin's install-module.pl replaces the
@@ -141,7 +141,7 @@ case "${1:-}" in
 		;;
 	*)
 		VERSION=$1
-		# Accept "1.5.3" as well as the release tag form "v1.5.3".
+		# Accept "1.6.0" as well as the release tag form "v1.6.0".
 		case "$VERSION" in
 			[0-9]*) VERSION="v$VERSION" ;;
 		esac

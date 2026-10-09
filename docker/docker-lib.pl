@@ -1630,8 +1630,10 @@ return $1 if ($u =~ m!://[^/:]+:(\d+)!);
 return ($u =~ m!^https:!i) ? 443 : 80;
 }
 
-# virtualmin_domains() -> listref of { id, dom, proxy_pass } read directly from
-# Virtualmin's domain config files (fast, read-only, no CLI). Empty off Virtualmin.
+# virtualmin_domains() -> listref of { id, dom, proxy_pass, home, user, group }
+# read directly from Virtualmin's domain config files (fast, read-only, no CLI).
+# Empty off Virtualmin. home/user/group are used by the guided Compose deploy
+# to place a new project inside the domain's home, owned by the domain user.
 sub virtualmin_domains
 {
 my @out;
@@ -1647,7 +1649,9 @@ foreach my $f (@files) {
 	eval { &read_file("$dir/$f", \%dom); };
 	next if (!$dom{'dom'});
 	push(@out, { 'id' => $f, 'dom' => $dom{'dom'},
-		     'proxy_pass' => $dom{'proxy_pass'} });
+		     'proxy_pass' => $dom{'proxy_pass'},
+		     'home' => $dom{'home'}, 'user' => $dom{'user'},
+		     'group' => $dom{'group'} });
 	}
 return [ sort { $a->{'dom'} cmp $b->{'dom'} } @out ];
 }
@@ -2048,6 +2052,171 @@ if (@st) {
 	chmod($st[2] & 07777, $env);
 	}
 return (0, $env);
+}
+
+# ----------------------------------------------------------------------------
+# Guided Compose deploy
+# "Deploy a new Compose project" for non-technical users: pick a name and a
+# location, paste a compose file, optionally an .env, and the module creates
+# the folder, writes the files, validates them and starts the stack.
+# ----------------------------------------------------------------------------
+
+# new_project_dir(PROJECT, DOMAIN, CUSTOM_DIR) -> ($failed, $dir, $uid, $gid)
+# Resolve the folder a new project lives in, and who should own it:
+#   * DOMAIN given  -> <domain home>/docker/<project>, owned by the domain's
+#     user/group. The domain MUST be one Virtualmin knows about - the posted
+#     value is never trusted, it is looked up in virtualmin_domains().
+#   * CUSTOM_DIR    -> used as-is: must be absolute, clean and free of "..".
+#   * neither       -> /opt/docker/<project>, owned by root.
+# On failure $dir holds a plain-language error message.
+sub new_project_dir
+{
+my ($project, $domain, $custom) = @_;
+return (1, "Invalid project name (must be lowercase letters, digits, - or _)")
+	if (!&is_valid_project_name($project));
+my ($dir, $uid, $gid) = (undef, 0, 0);
+if (defined($domain) && $domain ne '') {
+	my ($d) = grep { $_->{'dom'} eq $domain } @{&virtualmin_domains()};
+	return (1, "Unknown Virtualmin domain: $domain") if (!$d);
+	my $home = $d->{'home'};
+	return (1, "The domain $domain has no usable home directory recorded")
+		if (!&is_clean_token($home) || $home !~ m!^/! || $home =~ /\.\./);
+	$home =~ s!/+$!!;
+	$dir = $home."/docker/".$project;
+	if ($d->{'user'}) {
+		my @pw = getpwnam($d->{'user'});
+		return (1, "The domain user ".$d->{'user'}." does not exist on this system")
+			if (!@pw);
+		($uid, $gid) = ($pw[2], $pw[3]);
+		}
+	if ($d->{'group'}) {
+		my @gr = getgrnam($d->{'group'});
+		$gid = $gr[2] if (@gr);
+		}
+	}
+elsif (defined($custom) && $custom =~ /\S/) {
+	$custom =~ s/^\s+|\s+$//g;
+	return (1, "Invalid directory") if (!&is_clean_token($custom));
+	return (1, "The directory must be a FULL path starting with /, for example ".
+		   "/opt/docker/".$project) if ($custom !~ m!^/!);
+	return (1, "The directory must not contain \"..\"") if ($custom =~ /\.\./);
+	$custom =~ s!/{2,}!/!g;
+	$custom =~ s!/+$!!;
+	return (1, "The directory cannot be the root of the filesystem") if ($custom eq '');
+	$dir = $custom;
+	}
+else {
+	$dir = "/opt/docker/".$project;
+	}
+return (0, $dir, $uid, $gid);
+}
+
+# create_compose_project(PROJECT, DIR, COMPOSE, ENV, UID, GID)
+#   -> ($failed, $msg, $file)
+# Create DIR (mkdir -p, 0755), write docker-compose.yml and - when ENV is not
+# empty - .env (0600), chown everything to UID/GID, then validate the result
+# with "compose config --quiet". Refuses to touch a folder that already holds
+# a docker-compose.yml. On a validation failure the files are LEFT IN PLACE so
+# the user can fix them; $msg then carries the compose output. $file is the
+# full path of the compose file.
+sub create_compose_project
+{
+my ($project, $dir, $compose, $env, $uid, $gid) = @_;
+return (1, "Invalid project name (must be lowercase letters, digits, - or _)")
+	if (!&is_valid_project_name($project));
+return (1, "Invalid project directory")
+	if (!&is_clean_token($dir) || $dir !~ m!^/! || $dir =~ /\.\./);
+$compose = '' if (!defined($compose));
+$env = '' if (!defined($env));
+return (1, "The compose file content contains a NUL byte") if ($compose =~ /\0/);
+return (1, "The .env content contains a NUL byte") if ($env =~ /\0/);
+$compose =~ s/\r\n?/\n/g;
+$env =~ s/\r\n?/\n/g;
+return (1, "The compose file content is empty") if ($compose !~ /\S/);
+$compose .= "\n" if ($compose !~ /\n\z/);
+$env .= "\n" if ($env =~ /\S/ && $env !~ /\n\z/);
+$uid = 0 if (!defined($uid) || $uid !~ /^\d+$/);
+$gid = 0 if (!defined($gid) || $gid !~ /^\d+$/);
+
+my $file = $dir."/docker-compose.yml";
+my $envfile = $dir."/.env";
+return (1, "A project already exists in $dir (it already contains a ".
+	   "docker-compose.yml). Choose another name or directory, or manage ".
+	   "the existing project from the list above.") if (-e $file);
+return (1, "$dir exists but is not a directory") if (-e $dir && !-d $dir);
+
+# Refuse symbolic links in the path that are not owned by root. The folder
+# may sit inside a domain user's home, and that user must not be able to
+# redirect a write made by root (e.g. ~/docker -> /etc) by planting a link
+# in advance. Root-owned links (/var -> /private/var, /home -> /srv/home)
+# were created by the admin and are trusted.
+my $path = '';
+foreach my $part (grep { $_ ne '' } split(m!/!, $dir)) {
+	$path .= "/".$part;
+	my @st = lstat($path);
+	return (1, "$path is a symbolic link not owned by root; refusing to ".
+		   "create the project there")
+		if (@st && -l _ && $st[4] != 0);
+	}
+
+# mkdir -p, remembering what we created so only new folders are chowned.
+my @created;
+$path = '';
+foreach my $part (grep { $_ ne '' } split(m!/!, $dir)) {
+	$path .= "/".$part;
+	next if (-d $path);
+	mkdir($path, 0755) || return (1, "Could not create directory $path: $!");
+	push(@created, $path);
+	}
+chown($uid, $gid, @created) if (@created);
+
+# Create the files atomically: O_EXCL refuses anything that already exists
+# (including a dangling symlink) and O_NOFOLLOW never writes through a link.
+my ($wf, $werr) = &write_new_file($file, $compose, 0640, $uid, $gid);
+return (1, $werr) if ($wf);
+if ($env =~ /\S/) {
+	($wf, $werr) = &write_new_file($envfile, $env, 0600, $uid, $gid);
+	return (1, $werr) if ($wf);
+	}
+
+# Validate before anything is started. The files stay so they can be fixed.
+my ($vf, $vo) = &compose_run($file, 'config', { 'project' => $project });
+if ($vf) {
+	return (1, "The files were written to $dir, but Docker Compose rejected ".
+		   "the compose file. Edit $file to fix the problem (the folder ".
+		   "has been left in place), then start the project from the ".
+		   "list above.\n\n".$vo, $file);
+	}
+return (0, "", $file);
+}
+
+# write_new_file(PATH, CONTENT, MODE, UID, GID) -> ($failed, $error)
+# Create PATH with O_CREAT|O_EXCL|O_NOFOLLOW so an existing file or a planted
+# symlink is refused instead of overwritten or followed, then chown it.
+sub write_new_file
+{
+my ($path, $content, $mode, $uid, $gid) = @_;
+require Fcntl;
+my $flags = Fcntl::O_WRONLY() | Fcntl::O_CREAT() | Fcntl::O_EXCL();
+$flags |= Fcntl::O_NOFOLLOW() if (defined(&Fcntl::O_NOFOLLOW));
+my $fh;
+sysopen($fh, $path, $flags, $mode)
+	|| return (1, (-e $path || -l $path)
+		? "$path already exists; refusing to overwrite it"
+		: "Could not write $path: $!");
+print $fh $content;
+close($fh) || return (1, "Could not write $path: $!");
+chmod($mode, $path);
+chown($uid, $gid, $path);
+return (0, undef);
+}
+
+# start_compose_project(PROJECT, FILE) -> ($failed, $output)
+# "compose up -d" for a project just created by create_compose_project.
+sub start_compose_project
+{
+my ($project, $file) = @_;
+return &compose_run($file, 'up', { 'project' => $project });
 }
 
 # ----------------------------------------------------------------------------
