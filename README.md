@@ -16,8 +16,8 @@ with a live dashboard widget and **Virtualmin reverse-proxy awareness**.
 
 ### [⬇️ Download the latest module (`docker.wbm.gz`)](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.wbm.gz)
 
-**Current release: [v1.5.2](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/tag/v1.5.2)** ·
-[direct link](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.2/docker.wbm.gz) ·
+**Current release: [v1.5.3](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/tag/v1.5.3)** ·
+[direct link](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.3/docker.wbm.gz) ·
 [all releases](https://github.com/MrZaKaRiA/Virtualmin-Docker/releases)
 
 </div>
@@ -47,12 +47,6 @@ management that fits right in — under **Servers → Docker**.
   deleted before anything happens.
 - ⬆️ **Real updates** — a dedicated Update action applies new versions from
   `.env` / `docker-compose.yml` (a restart alone never does).
-
-## 📸 Screenshots
-
-| Dashboard & containers | Home-screen widget |
-| --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Widget](docs/screenshots/widget.png) |
 
 ## 🚀 Features
 
@@ -154,6 +148,19 @@ This is the whole reason the module exists.
 
 ## ⚙️ Installation
 
+**Option 0 — one command (install or upgrade).**
+Run this as root on the Webmin host; it finds your Webmin directory, downloads
+the latest release, checks the archive and installs it with Webmin's own
+`install-module.pl`:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/MrZaKaRiA/Virtualmin-Docker/main/install.sh && sudo sh install.sh
+```
+
+`sudo sh install.sh v1.5.3` pins a specific version, and
+`sudo sh install.sh --uninstall` removes the module again. Re-running the
+script upgrades in place.
+
 **Option 1 — install straight from the URL (fastest).**
 In Webmin go to **Webmin Configuration → Webmin Modules**, choose
 **From ftp or http URL**, paste this, and click **Install Module**:
@@ -165,7 +172,7 @@ https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/latest/download/docker.w
 To pin an exact version instead, use the versioned URL:
 
 ```
-https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.2/docker.wbm.gz
+https://github.com/MrZaKaRiA/Virtualmin-Docker/releases/download/v1.5.3/docker.wbm.gz
 ```
 
 **Option 2 — download, then upload.**
@@ -189,6 +196,47 @@ Build it yourself from a checkout:
 ```sh
 tar -czf docker.wbm.gz docker     # top-level dir in the archive must be "docker"
 ```
+
+### 🗑️ Uninstall
+
+Either run the installer with `--uninstall`:
+
+```sh
+sudo sh install.sh --uninstall
+```
+
+or, in Webmin, go to **Webmin Configuration → Webmin Modules → Delete Modules**,
+tick **Docker** and click **Delete**. Webmin removes the module files and its
+configuration in `/etc/webmin/docker`.
+
+## 🧯 Troubleshooting
+
+**`docker::load_theme_library failed : Undefined subroutine &docker::load_theme_library`**
+on the **Webmin Users → Docker** ACL page, or
+**`docker::list_system_info failed : Undefined subroutine &docker::foreign_available`**
+on the Webmin home page or on Virtualmin's support pages.
+Both are the same bug in **v1.5.2 and earlier**: the module's hook files
+(`acl_security.pl`, `system_info.pl`, …) loaded the module library with a
+path relative to the working directory, which fails when Webmin loads them
+from another module. **Fixed in v1.5.3** — upgrade with any of the install
+options above; your settings and ACLs are kept.
+
+**`permission denied while trying to connect to the Docker daemon socket`.**
+Webmin normally runs as root, so this does not happen on a standard setup. If
+you run a non-root Webmin or rootless Docker, create a Docker context that
+points at the rootless socket and select it on the module's **Contexts** page
+or as the context override in **Module Config** (see
+[Rootless Docker](#-rootless-docker)).
+
+**`Cannot connect to the Docker daemon`.**
+Either the daemon is not running (`systemctl start docker`), or Docker was
+installed via snap (`/snap/bin/docker`) and Webmin's PATH does not include
+that directory — add it under **Webmin Configuration → Operating System and
+Environment → Program search path**.
+
+**The dashboard widget is missing.**
+The widget needs the **System and Server Status** module to be installed, and
+"show the dashboard widget" must be enabled in the module's **Module Config**.
 
 ## 🛠️ Configuration
 
@@ -228,12 +276,17 @@ the context override in the module's **Contexts** page.
 | `status_monitor.pl` | Monitor types for System and Server Status |
 | `acl_security.pl` · `defaultacl` | Per-user access control |
 | `log_parser.pl` · `install_check.pl` | Audit-log rendering · Docker auto-detection |
+| `tests/` (repo root) | The `make test` suite: Perl syntax check, translation-key check, hook-loading regression test |
+| `install.sh` (repo root) | One-command install / upgrade / uninstall script (see [Installation](#%EF%B8%8F-installation)) |
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome. Every `.cgi`/`.pl` file is validated with
-`perl -c` in CI, and changes to command construction should keep the `sq()` +
-allowlist discipline described above.
+Issues and pull requests are welcome. CI runs `make test` on every push and
+pull request — a Perl syntax check of every `.cgi`/`.pl` file, a
+translation-key check, and a regression test that loads every hook file the
+way Webmin's `foreign_require` does (from another directory) — and
+`make package` builds `docker.wbm.gz`. Changes to command construction should
+keep the `sq()` + allowlist discipline described above.
 
 ## 📜 License
 

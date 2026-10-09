@@ -437,3 +437,18 @@ stor_prune_vol_note=Prune only removes unused ANONYMOUS volumes (the ones with l
 
 yes=Yes
 no=No
+
+# First-run / diagnostics (1.5.3)
+diag_install_detected=Detected operating system: $1
+diag_install_script=Recommended: Docker's official convenience script, which installs the current Docker Engine together with the Compose plugin:
+diag_install_apt=Alternative from the Debian / Ubuntu repositories (older release, maintained by the distribution):
+diag_install_dnf=On RHEL, AlmaLinux, Rocky Linux and Fedora, add Docker's repository and install from it (Fedora users: replace <tt>rhel</tt> with <tt>fedora</tt> in the URL):
+diag_install_unknown=No install recipe is known for this operating system. Follow the official instructions at $1.
+diag_install_after=After installing, make sure the service is running and starts on boot: $1
+diag_install_snap=If Docker was installed via snap, the <tt>docker</tt> command lives in <tt>/snap/bin</tt>, which Webmin does not search by default. Add <tt>/snap/bin</tt> to the program search path under $1, then check again.
+diag_install_snap_where=Webmin Configuration &rarr; Operating System and Environment
+diag_check_again=Check again
+diag_hint_socket=Docker is installed and running, but the Webmin user is not allowed to open its socket. Run Webmin as root or add its user to the <tt>docker</tt> group - or, for rootless Docker, select the matching context on the $1 page.
+diag_hint_daemon=The Docker service is installed but not running. Start it with $1 and make it start on boot with $2.
+diag_hint_context=The configured Docker context does not exist on this host. Clear or correct the override in Module Config or on the $1 page.
+diag_hint_path=The shell could not find the <tt>docker</tt> command. Make sure its directory (for example <tt>/usr/bin</tt> or <tt>/snap/bin</tt>) is in Webmin's program search path under $1.

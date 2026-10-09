@@ -12,8 +12,9 @@ our (%config, %text, %in, %access);
 &ui_print_header(undef, $text{'index_title'}, "", undef, 1, 1);
 print &dk_style();
 
+# First-run page: distro-specific install command, snap PATH caveat, re-check link.
 if (!&has_command('docker')) {
-	&ui_print_endpage($text{'index_notinstalled'});
+	&ui_print_endpage(&docker_install_hint());
 	}
 
 # Feedback from act.cgi redirects.
@@ -25,8 +26,10 @@ print &ui_alert_box(&html_escape($in{'err'}), 'danger') if ($in{'err'});
 # ---------------------------------------------------------------------------
 my $sum = &summary_counts();
 if (!$sum->{'ok'}) {
-	print &ui_alert_box(
-		&text('index_daemondown', &html_escape($sum->{'error'} || '')), 'danger');
+	# Raw daemon error, plus a plain-language hint when the lib recognises it.
+	my $msg = &text('index_daemondown', &html_escape($sum->{'error'} || ''));
+	$msg .= "<br>".$sum->{'hint'} if ($sum->{'hint'});
+	print &ui_alert_box($msg, 'danger');
 	}
 else {
 	print &dk_cards([

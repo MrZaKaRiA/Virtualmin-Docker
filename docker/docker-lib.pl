@@ -30,7 +30,7 @@ use WebminCore;
 
 init_config();
 
-our (%config, %text, %gconfig);
+our (%config, %text, %gconfig, $module_var_directory, $module_name);
 
 # JSON::PP ships with core Perl (>= 5.14). Load lazily and degrade gracefully.
 my $have_json = eval { require JSON::PP; JSON::PP->import(qw(decode_json)); 1; };
@@ -192,18 +192,38 @@ return ($failed, $failed ? ($err || $out) : $out);
 
 # summary_counts() -> hashref of headline numbers for the dashboard / widget.
 # Returns { 'ok' => 0/1, 'error' => ..., running/paused/stopped/containers/images/version }.
+# On failure a 'hint' key carries a plain-language suggestion (HTML, may be '').
+#
+# The home-page widget calls this on every Webmin dashboard render, so a
+# successful result is cached in $module_var_directory/summary.cache for
+# $config{'summary_cache'} seconds (default 30, 0 disables). Failures are never
+# cached so a daemon that comes back is noticed immediately.
 sub summary_counts
 {
+my $ttl = defined($config{'summary_cache'}) ? int($config{'summary_cache'}) : 30;
+my $cf = $ttl > 0 ? &summary_cache_file() : undef;
+if ($cf && -r $cf) {
+	my %c;
+	eval { &read_file($cf, \%c); };
+	if (!$@ && $c{'ok'} && $c{'_time'} && $c{'_time'} <= time() &&
+	    time() - $c{'_time'} < $ttl) {
+		delete($c{'_time'});
+		return \%c;
+		}
+	}
+
 my ($failed, $info) = &get_info();
 if ($failed || ref($info) ne 'HASH') {
-	return { 'ok' => 0, 'error' => (ref($info) ? '' : $info) };
+	my $err = ref($info) ? '' : $info;
+	return { 'ok' => 0, 'error' => $err, 'hint' => &docker_error_hint($err) };
 	}
 # docker info also reports ServerErrors when the client is up but the daemon is not.
 if ($info->{'ServerErrors'} && ref($info->{'ServerErrors'}) eq 'ARRAY' &&
     @{$info->{'ServerErrors'}}) {
-	return { 'ok' => 0, 'error' => join("; ", @{$info->{'ServerErrors'}}) };
+	my $err = join("; ", @{$info->{'ServerErrors'}});
+	return { 'ok' => 0, 'error' => $err, 'hint' => &docker_error_hint($err) };
 	}
-return {
+my $rv = {
 	'ok'         => 1,
 	'containers' => $info->{'Containers'},
 	'running'    => $info->{'ContainersRunning'},
@@ -216,6 +236,29 @@ return {
 	'ncpu'       => $info->{'NCPU'},
 	'memtotal'   => $info->{'MemTotal'},
 	};
+if ($cf) {
+	# Plain key=value via Webmin's write_file; every value is a scalar.
+	my %c = map { $_ => (defined($rv->{$_}) ? $rv->{$_} : '') } keys %$rv;
+	$c{'_time'} = time();
+	eval { &write_file($cf, \%c); };
+	}
+return $rv;
+}
+
+# summary_cache_file() -> path of the dashboard-counts cache, or undef when
+# Webmin provides no per-module var directory (very old Webmin, syntax checks).
+sub summary_cache_file
+{
+return undef if (!$module_var_directory || !-d $module_var_directory);
+return $module_var_directory."/summary.cache";
+}
+
+# clear_summary_cache() - drop the cached counts. Call after any action that
+# changes container/image state so the next page render is fresh.
+sub clear_summary_cache
+{
+my $cf = &summary_cache_file();
+unlink($cf) if ($cf && -e $cf);
 }
 
 # system_df() -> ($failed, \@rows) each { Type, TotalCount, Active, Size, Reclaimable }.
@@ -223,6 +266,83 @@ sub system_df
 {
 my ($failed, $rows) = &docker_json_lines('system df --format "{{json .}}"');
 return ($failed, $rows);
+}
+
+# ----------------------------------------------------------------------------
+# First-run / diagnostics
+# ----------------------------------------------------------------------------
+
+# docker_error_hint(RAW_ERROR) -> HTML hint for the most common daemon errors,
+# or '' when nothing matches. The caller is expected to show the (escaped) raw
+# error as well; this only adds the "what to do about it" sentence.
+sub docker_error_hint
+{
+my ($raw) = @_;
+$raw = '' if (!defined($raw));
+my $ctxlink = "<a href='contexts.cgi'>".&html_escape($text{'nav_contexts'})."</a>";
+my $pathwhere = &html_escape($text{'diag_install_snap_where'});
+if ($raw =~ /permission denied/i && $raw =~ /docker\.sock/i) {
+	return &text('diag_hint_socket', $ctxlink);
+	}
+if ($raw =~ /\bcontext\b.*\bnot found\b/i || $raw =~ /no such context/i) {
+	return &text('diag_hint_context', $ctxlink);
+	}
+if ($raw =~ /Cannot connect to the Docker daemon/i ||
+    $raw =~ /Is the docker daemon running/i) {
+	return &text('diag_hint_daemon',
+		"<tt>systemctl start docker</tt>",
+		"<tt>systemctl enable --now docker</tt>");
+	}
+if ($raw =~ /command not found/i || $raw =~ /docker:\s*not found/i) {
+	return &text('diag_hint_path', $pathwhere);
+	}
+return '';
+}
+
+# docker_install_hint() -> HTML for the "Docker is not installed" first-run
+# page: a one-line explanation, the install command for the detected distro
+# (from Webmin's %gconfig os_type), the snap PATH caveat and a re-check link.
+sub docker_install_hint
+{
+my $os = $gconfig{'os_type'} || '';
+my $osname = join(" ", grep { defined($_) && $_ ne '' }
+	($gconfig{'real_os_type'}, $gconfig{'real_os_version'}));
+$osname = $os.($gconfig{'os_version'} ? " ".$gconfig{'os_version'} : '')
+	if ($osname eq '');
+my $script = "<pre>curl -fsSL https://get.docker.com | sh</pre>\n";
+
+my $html = "<p>".$text{'index_notinstalled'}."</p>\n";
+$html .= "<p>".&text('diag_install_detected',
+	"<tt>".&html_escape($osname || '?')."</tt>")."</p>\n";
+if ($os eq 'debian-linux') {
+	$html .= "<p>".$text{'diag_install_script'}."</p>\n".$script;
+	$html .= "<p>".$text{'diag_install_apt'}."</p>\n".
+		 "<pre>apt install docker.io docker-compose-v2</pre>\n";
+	}
+elsif ($os eq 'redhat-linux') {
+	$html .= "<p>".$text{'diag_install_dnf'}."</p>\n".
+		 "<pre>dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo\n".
+		 "dnf install docker-ce docker-ce-cli containerd.io docker-compose-plugin</pre>\n";
+	$html .= "<p>".$text{'diag_install_script'}."</p>\n".$script;
+	}
+else {
+	my $url = "https://docs.docker.com/engine/install/";
+	$html .= "<p>".&text('diag_install_unknown',
+		"<a href='$url' target='_blank'>$url</a>")."</p>\n";
+	}
+$html .= "<p>".&text('diag_install_after',
+	"<tt>systemctl enable --now docker</tt>")."</p>\n";
+
+# Snap installs put the binary in /snap/bin, which Webmin's has_command()
+# does not search unless the admin adds it to the program search path.
+my $where = &html_escape($text{'diag_install_snap_where'});
+if (&foreign_available("webmin")) {
+	$where = "<a href='".&get_webprefix()."/webmin/edit_os.cgi'>$where</a>";
+	}
+$html .= "<p>".&text('diag_install_snap', $where)."</p>\n";
+$html .= "<p><b><a href='index.cgi'>".&html_escape($text{'diag_check_again'}).
+	 "</a></b></p>\n";
+return $html;
 }
 
 # ----------------------------------------------------------------------------

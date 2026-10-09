@@ -1,9 +1,12 @@
-name: Build and release
+name: Test, build and release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -15,31 +18,33 @@ permissions:
   contents: write
 
 jobs:
+  # Runs on every push, pull request and tag. Uses the WebminCore stub in
+  # tests/stub so the module can be compiled and the foreign_require() hook
+  # loading exercised without a Webmin install on the runner.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Run test-suite
+        run: make test
+
+  # Only builds/publishes for tags and manual dispatch, and only once the
+  # tests have passed.
   build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
       - name: Validate Perl syntax
-        run: |
-          # docker-lib.pl does `use WebminCore`, which is not present on the
-          # runner. Provide a tiny stub so `perl -c` can validate syntax.
-          stub="$(mktemp -d)"
-          printf 'package WebminCore;\nsub import { }\n1;\n' > "$stub/WebminCore.pm"
-          fail=0
-          for f in docker/*.cgi docker/*.pl; do
-            echo "Checking $f"
-            PERL5LIB="$stub" perl -c "$f" || fail=1
-          done
-          exit $fail
+        run: make syntax
 
       - name: Build .wbm.gz package
-        run: |
-          # The package's top-level directory must equal the module name.
-          tar --exclude='.DS_Store' --exclude='*.swp' \
-              -czf docker.wbm.gz docker
-          ls -l docker.wbm.gz
+        run: make package
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -48,7 +53,6 @@ jobs:
           path: docker.wbm.gz
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version || github.ref_name }}
