@@ -10,3 +10,6 @@ dist/
 *~
 .idea/
 .vscode/
+
+# Local editor/assistant state
+.claude/

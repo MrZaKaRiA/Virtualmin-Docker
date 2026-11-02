@@ -46,17 +46,36 @@ if (!$cf2) {
 	my @mine = grep { (&container_project($_->{'labels'}) || '') eq $project }
 			@$containers;
 	if (@mine) {
+		# One "image ls" to show the current image ID and age per
+		# container, so the user can see what changed after an Update.
+		# Degrades to empty cells if the lookup fails.
+		my %img;
+		my ($ilf, $images) = &list_images();
+		if (!$ilf) {
+			foreach my $i (@$images) {
+				$img{$i->{'name'}} = $i if ($i->{'name'});
+				$img{$i->{'id'}} = $i if ($i->{'id'});
+				}
+			}
 		print &ui_subheading($text{'update_containers'});
 		print &ui_columns_start([ $text{'cont_name'}, $text{'cont_image'},
+			$text{'ux_image_id'}, $text{'ux_image_age'},
 			$text{'cont_status'} ], 100);
 		foreach my $c (@mine) {
+			my $ref = $c->{'image'} || '';
+			my $i = $img{$ref} || $img{$ref.":latest"} ||
+				$img{substr($ref, 0, 12)} || {};
+			my $iid = $i->{'id'} ? substr($i->{'id'}, 0, 12) : '';
 			print &ui_columns_row([
 				&html_escape($c->{'name'}),
 				&html_escape($c->{'image'}),
+				$iid ne '' ? "<tt>".&html_escape($iid)."</tt>" : "",
+				&html_escape($i->{'created'} || ''),
 				&state_label($c->{'state'}, $c->{'status'}),
 				]);
 			}
 		print &ui_columns_end();
+		print &help_note($text{'ux_update_idnote'});
 		}
 	}
 

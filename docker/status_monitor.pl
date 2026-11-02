@@ -4,7 +4,10 @@
 #   docker_up           - is the Docker daemon reachable?
 #   docker_containerup  - is a named container running?
 
-do './docker-lib.pl';
+# Loaded by Webmin's foreign_require() from OTHER modules' directories, so
+# the lib must be found via @INC (which foreign_require primes with this
+# module's directory). Never use a './' relative path here - see issues #1, #2.
+require 'docker-lib.pl';
 
 # status_monitor_list() - supported monitor types.
 sub status_monitor_list
@@ -14,7 +17,20 @@ return ( [ "docker_up", $text{'monitor_docker_up'} ],
 }
 
 # status_monitor_status(type, &monitor, from-ui)
+# Wrapped in eval so an internal error reports "unknown" (-1) to the status
+# module instead of breaking its page.
 sub status_monitor_status
+{
+my $rv = eval { &status_monitor_status_real(@_) };
+if ($@) {
+	my $e = $@; $e =~ s/\s+$//;
+	&error_stderr("docker status_monitor: $e") if (defined(&error_stderr));
+	return { 'up' => -1, 'desc' => $e };
+	}
+return $rv;
+}
+
+sub status_monitor_status_real
 {
 my ($type, $monitor, $fromui) = @_;
 

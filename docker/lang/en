@@ -275,6 +275,7 @@ acl_backup=Can back up and restore (save / load / commit / export)?
 acl_proxy=Can manage Virtualmin website proxies (reconnect domains to containers)?
 acl_registry=Can log in to registries?
 acl_context=Can switch the Docker context?
+acl_host_mount=Can mount host paths into containers? This is equivalent to host-root access.
 
 monitor_docker_up=Docker Up
 monitor_container_up=Docker Container Up
@@ -437,3 +438,62 @@ stor_prune_vol_note=Prune only removes unused ANONYMOUS volumes (the ones with l
 
 yes=Yes
 no=No
+
+# First-run / diagnostics (1.6.0)
+diag_install_detected=Detected operating system: $1
+diag_install_script=Recommended: Docker's official convenience script, which installs the current Docker Engine together with the Compose plugin:
+diag_install_apt=Alternative from the Debian / Ubuntu repositories (older release, maintained by the distribution):
+diag_install_dnf=On RHEL, AlmaLinux, Rocky Linux and Fedora, add Docker's repository and install from it (Fedora users: replace <tt>rhel</tt> with <tt>fedora</tt> in the URL):
+diag_install_unknown=No install recipe is known for this operating system. Follow the official instructions at $1.
+diag_install_after=After installing, make sure the service is running and starts on boot: $1
+diag_install_snap=If Docker was installed via snap, the <tt>docker</tt> command lives in <tt>/snap/bin</tt>, which Webmin does not search by default. Add <tt>/snap/bin</tt> to the program search path under $1, then check again.
+diag_install_snap_where=Webmin Configuration &rarr; Operating System and Environment
+diag_check_again=Check again
+diag_hint_socket=Docker is installed and running, but the Webmin user is not allowed to open its socket. Run Webmin as root or add its user to the <tt>docker</tt> group - or, for rootless Docker, select the matching context on the $1 page.
+diag_hint_daemon=The Docker service is installed but not running. Start it with $1 and make it start on boot with $2.
+diag_hint_context=The configured Docker context does not exist on this host. Clear or correct the override in Module Config or on the $1 page.
+diag_hint_path=The shell could not find the <tt>docker</tt> command. Make sure its directory (for example <tt>/usr/bin</tt> or <tt>/snap/bin</tt>) is in Webmin's program search path under $1.
+
+# Small UX items (1.6.0)
+ux_filter=Filter containers:
+ux_filter_count=$1 of $2 shown
+ux_copy=Copy to clipboard
+ux_copied=Copied
+ux_image_id=Image ID
+ux_image_age=Image created
+ux_update_idnote=After Update, containers whose image has a newer version will show a different image ID here.
+
+# Guided Compose deploy (1.6.0)
+newproj_heading=Deploy a new Compose project
+newproj_intro=Give the project a name, choose where it lives, paste its docker-compose.yml and click Create. A folder is created, the two files are written into it, the project is checked and started. Afterwards go to Domains &amp; Proxies to connect a domain to the port the project publishes.
+newproj_table=New project
+newproj_name=Project name
+newproj_name_hint=Lowercase letters, digits, - and _ only, for example <tt>myblog</tt>. This also becomes the name shown in the project list.
+newproj_location=Location
+newproj_custom=Custom directory
+newproj_location_hint=Choosing a domain puts the project in <tt>&lt;domain home&gt;/docker/&lt;name&gt;</tt>, owned by that domain's user. Choose "Custom directory" to type a folder yourself.
+newproj_dir=Custom directory
+newproj_dir_hint=Full path starting with /, for example <tt>/opt/docker/myblog</tt>. The files are written straight into this folder. Leave empty to use <tt>/opt/docker/&lt;name&gt;</tt>.
+newproj_dir_hint_custom=Only used when "Custom directory" is selected above. Full path starting with /, for example <tt>/opt/docker/myblog</tt>; the files are written straight into this folder.
+newproj_compose=docker-compose.yml
+newproj_compose_hint=Paste the compose file of the application here (most applications publish one in their documentation). Recommended: publish ports on 127.0.0.1 only, as in the example, and connect a domain to that port under Domains &amp; Proxies - the site then gets Virtualmin's SSL and is not exposed directly to the internet.
+newproj_env=.env (optional)
+newproj_env_hint=Optional settings file, one <tt>NAME=value</tt> per line (passwords, versions, ...). Leave empty if the compose file does not use variables. It can be changed later with "Edit .env".
+newproj_start=Start it now
+newproj_start_label=Start it now (docker compose up -d)
+newproj_button=Create project
+newproj_title=New Compose project
+newproj_back=Back to Compose
+newproj_err_name=Please enter a project name using only lowercase letters, digits, - or _
+newproj_err_domain=Invalid domain selected
+newproj_err_empty=Please paste the docker-compose.yml content first
+newproj_fail=Could not create project $1
+newproj_done=Project $1 was created
+newproj_done_started=Project $1 was created and started
+newproj_start_fail=Project $1 was created and its files are valid, but starting it failed - see the output below
+newproj_body_dir=Project folder: $1
+newproj_body_file=Compose file: $1
+newproj_body_env=Environment file: $1
+newproj_goto_compose=Back to the project list &raquo;
+newproj_next=Next step: open $1 and connect a domain to the published port (8080 in the example). Visitors of that domain will then reach the application.
+newproj_next_link=Domains &amp; Proxies

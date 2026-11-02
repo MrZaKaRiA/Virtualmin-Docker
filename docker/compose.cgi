@@ -116,6 +116,58 @@ else {
 	}
 
 # ---------------------------------------------------------------------------
+# New project: guided deploy for non-technical users (folder + files + up -d)
+# ---------------------------------------------------------------------------
+if (&can('create')) {
+	print &ui_hr();
+	print &ui_subheading($text{'newproj_heading'});
+	print &help_note($text{'newproj_intro'});
+	my $doms = &has_virtualmin() ? &virtualmin_domains() : [];
+	print &ui_form_start("act.cgi", "post");
+	print &ui_hidden("c", "newproj");
+	print &ui_table_start($text{'newproj_table'}, undef, 2);
+	print &ui_table_row($text{'newproj_name'},
+		&ui_textbox("project", "", 30)."<br>".
+		&help_note($text{'newproj_name_hint'}));
+	if (@$doms) {
+		print &ui_table_row($text{'newproj_location'},
+			&ui_select("location", "", [
+				(map { [ $_->{'dom'}, $_->{'dom'} ] } @$doms),
+				[ "custom", $text{'newproj_custom'} ] ])."<br>".
+			&help_note($text{'newproj_location_hint'}));
+		}
+	else {
+		print &ui_hidden("location", "custom");
+		}
+	print &ui_table_row($text{'newproj_dir'},
+		&ui_textbox("dir", "", 60)."<br>".
+		&help_note(@$doms ? $text{'newproj_dir_hint_custom'}
+				  : $text{'newproj_dir_hint'}));
+	# A small, working example so the box is never intimidatingly empty.
+	my $example = join("\n",
+		"# Example: a small web server, reachable from this machine only",
+		"# on port 8080. Replace this with the compose file of the",
+		"# application you want to run.",
+		"services:",
+		"  web:",
+		"    image: nginx:alpine",
+		"    restart: unless-stopped",
+		"    ports:",
+		"      - \"127.0.0.1:8080:80\"",
+		"");
+	print &ui_table_row($text{'newproj_compose'},
+		&ui_textarea("compose", $example, 18, 80)."<br>".
+		&help_note($text{'newproj_compose_hint'}));
+	print &ui_table_row($text{'newproj_env'},
+		&ui_textarea("env", "", 6, 80)."<br>".
+		&help_note($text{'newproj_env_hint'}));
+	print &ui_table_row($text{'newproj_start'},
+		&ui_checkbox("start", 1, $text{'newproj_start_label'}, 1));
+	print &ui_table_end();
+	print &ui_form_end([ [ undef, $text{'newproj_button'} ] ]);
+	}
+
+# ---------------------------------------------------------------------------
 # Advanced: run an action against an arbitrary compose file
 # ---------------------------------------------------------------------------
 if (&can('manage')) {

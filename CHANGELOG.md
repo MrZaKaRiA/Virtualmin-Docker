@@ -4,6 +4,56 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-10-09
+
+### Fixed
+- **ACL page, dashboard widget and Virtualmin support pages crashing with
+  "Undefined subroutine &docker::load_theme_library" / "&docker::foreign_available"**
+  (GitHub issues #1 and #2). The hook files Webmin loads from other modules
+  (`acl_security.pl`, `system_info.pl`, `status_monitor.pl`, `log_parser.pl`,
+  `install_check.pl`) loaded the module library with `do './docker-lib.pl'`, a
+  path relative to the working directory. Webmin's `foreign_require()` does not
+  change directory when called from inside another module, so the library
+  silently failed to load and package `docker::` had no core functions. They
+  now use `require 'docker-lib.pl'` (resolved via `@INC`, like core Webmin
+  modules). Upgrading fixes both reports; settings and per-user ACLs are kept.
+- The dashboard widget and the status monitors are now wrapped in `eval`, so an
+  error inside this module can never take down the Webmin home page or a
+  Virtualmin page again.
+
+### Added
+- **Regression tests and CI on every push.** `make test` runs a Perl syntax
+  check, a translation-key check and `tests/foreign-load.t`, which loads every
+  hook file the way `foreign_require()` does (from another directory) and would
+  have caught the bug above. The GitHub workflow now runs the tests on every
+  push and pull request and only publishes a release once they pass.
+- **One-command install / upgrade / uninstall**: `install.sh` finds the Webmin
+  directory, downloads and checks the release package and hands it to Webmin's
+  `install-module.pl`.
+- **Deploy a new Compose project** from the Compose page: choose a name and a
+  Virtualmin domain (or a custom folder), paste the compose file and an
+  optional `.env`, and the module creates the folder, writes the files with the
+  domain user as owner, validates them with `compose config` and starts the
+  stack. Files are created with `O_EXCL|O_NOFOLLOW` and symbolic links in the
+  path are refused, so a domain user cannot redirect the write.
+- **First-run help**: when Docker is not installed the module shows the install
+  command for the detected distribution, the snap `PATH` caveat and a
+  "Check again" link; when the daemon is unreachable the raw error is followed
+  by a plain-language hint (socket permissions, service not running, bad
+  context override, binary not on `PATH`).
+- **Container list filter** (remembered per browser; filtered-out rows are
+  unticked so a bulk action never hits a hidden container), a **Copy to
+  clipboard** button on the logs tab, and the Update page now shows each
+  container's current image ID and age so the effect of an update is visible.
+- README: Troubleshooting and Uninstall sections; removed references to
+  screenshots that did not exist.
+
+### Changed
+- The counts used by the home-page widget are cached for 30 seconds
+  (Module Config: "Cache dashboard counts", 0 disables) and invalidated after
+  every state-changing action, so a slow daemon no longer slows every Webmin
+  home-page render.
+
 ## [1.5.2] - 2026-07-24
 
 ### Changed
