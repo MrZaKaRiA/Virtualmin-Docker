@@ -971,6 +971,53 @@ return (undef, undef);
 }
 
 my %COMPOSE_ACTIONS = map { $_ => 1 } qw(up down stop start restart pull ps logs config);
+
+# compose_config_uses_host_mount(FARG) -> ($failed, $uses_host_mount_or_error).
+# Ask Compose for its fully resolved configuration rather than trying to parse
+# YAML ourselves. This covers both short and long volume syntax, variables and
+# multiple compose files. It is deliberately a safe, read-only command.
+sub compose_config_uses_host_mount
+{
+my ($farg) = @_;
+return (1, "JSON support unavailable (install perl JSON::PP)") if (!$have_json);
+my ($failed, $out, $err) = &run_docker(
+	'compose '.$farg.' config --format json', undef, 1);
+return (1, $err || $out || "Could not read the resolved Compose configuration")
+	if ($failed);
+my $cfg = eval { decode_json($out) };
+return (1, "Could not parse the resolved Compose configuration")
+	if (ref($cfg) ne 'HASH');
+foreach my $service (values(%{$cfg->{'services'} || {}})) {
+	next if (ref($service) ne 'HASH');
+	foreach my $mount (@{$service->{'volumes'} || []}) {
+		if (ref($mount) eq 'HASH') {
+			return (0, 1) if (($mount->{'type'} || '') eq 'bind');
+			# Be conservative with an unfamiliar Compose output shape.
+			return (0, 1) if (&volume_mount_uses_host_path($mount->{'source'}));
+			}
+		elsif (&volume_mount_uses_host_path($mount)) {
+			return (0, 1);
+			}
+		}
+	}
+return (0, 0);
+}
+
+# compose_host_mount_allowed(ACTION, FARG) -> ($failed, $error).
+# Actions that can launch or recreate a container must not bypass the host_mount ACL via a
+# Compose file. Read-only and destructive-only actions do not expose a new host
+# path, so leave those available to their existing ACLs.
+sub compose_host_mount_allowed
+{
+my ($action, $farg) = @_;
+return (0, '') if ($action !~ /^(up|start|restart|update)$/ || &can('host_mount'));
+my ($failed, $uses) = &compose_config_uses_host_mount($farg);
+return (1, "Cannot verify whether this Compose project uses host bind mounts: ".
+		$uses." Grant the host_mount permission only if you trust this project.") if ($failed);
+return (1, "Host bind mounts require the host_mount permission") if ($uses);
+return (0, '');
+}
+
 sub compose_run
 {
 my ($file, $action, $opts) = @_;
@@ -995,6 +1042,10 @@ if (defined($opts->{'project'}) && $opts->{'project'} ne '') {
 	$pfx = '--project-name '.&sq($opts->{'project'}).' ';
 	}
 
+my $farg = $pfx.'--file '.&sq($file);
+my ($hmf, $hmo) = &compose_host_mount_allowed($action, $farg);
+return ($hmf, $hmo) if ($hmf);
+
 my $tail = '';
 $tail = ' up --detach' if ($action eq 'up');
 $tail = ' down' if ($action eq 'down');
@@ -1009,13 +1060,13 @@ $tail = ' config --quiet' if ($action eq 'config');
 
 if ($kind eq 'plugin') {
 	my ($failed, $out, $err) = &run_docker(
-		'compose '.$pfx.'--file '.&sq($file).$tail, undef, 0);
+		'compose '.$farg.$tail, undef, 0);
 	return ($failed, ($out || '').($err || ''));
 	}
 else {
 	# Legacy docker-compose binary (does not honour the module context flag).
 	my $bin = &has_command('docker-compose');
-	my $cmd = &sq($bin).' '.$pfx.'--file '.&sq($file).$tail;
+	my $cmd = &sq($bin).' '.$farg.$tail;
 	my ($out, $err);
 	my $status = &execute_command($cmd, undef, \$out, \$err, 0, 0);
 	return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
@@ -1096,6 +1147,9 @@ return (1, $files) if ($ff);
 # "compose ls" guarantees the existing containers and volumes are reused.
 my $farg = '--project-name '.&sq($name).' '.
 	   join(' ', map { '--file '.&sq($_) } @$files);
+
+my ($hmf, $hmo) = &compose_host_mount_allowed($action, $farg);
+return ($hmf, $hmo) if ($hmf);
 
 if ($action eq 'update') {
 	my ($f1, $o1, $e1) = &run_docker('compose '.$farg.' pull', undef, 0);
