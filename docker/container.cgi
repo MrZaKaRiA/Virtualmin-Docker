@@ -80,9 +80,49 @@ print $text{'log_refresh'}." ".&ui_select("auto-refresh", $in{'auto-refresh'},
 print &ui_form_end([ [ undef, $text{'act_refresh'} ] ]);
 
 print "<p>".&ui_link("container.cgi?tab=log&download=1&id=".&urlize($id).
-	($in{'timestamps'} ? "&timestamps=1" : ""), $text{'log_download'})."</p>";
+	($in{'timestamps'} ? "&timestamps=1" : ""), $text{'log_download'}).
+	" <button type='button' id='ux_copylog' data-copied='".
+	&html_escape($text{'ux_copied'})."'>".
+	&html_escape($text{'ux_copy'})."</button></p>";
 
+# The id on the <pre> is relied on by the copy button and by the auto-refresh
+# below, which replaces only the element's text, so the id survives a refresh.
 print "<pre id='container-log'>".&html_escape($lf ? '' : $log)."</pre>";
+
+# Copy the log text to the clipboard; falls back to execCommand on browsers
+# (or plain-http pages) without the async clipboard API.
+print <<'EOJS';
+<script type="text/javascript">
+(function() {
+  var btn = document.getElementById('ux_copylog');
+  if (!btn) { return; }
+  var label = btn.textContent, timer;
+  function done() {
+    btn.textContent = btn.getAttribute('data-copied') || label;
+    if (timer) { clearTimeout(timer); }
+    timer = setTimeout(function() { btn.textContent = label; }, 1500);
+  }
+  function fallback(txt) {
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { }
+    document.body.removeChild(ta);
+  }
+  btn.addEventListener('click', function() {
+    var pre = document.getElementById('container-log');
+    var txt = pre ? pre.textContent : '';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function() { fallback(txt); });
+    }
+    else { fallback(txt); }
+  });
+})();
+</script>
+EOJS
 
 # Auto-refresh: poll this page and swap in the fresh log block.
 my $self = "container.cgi?tab=log&id=".&urlize($id)."&tail=".int($tail).

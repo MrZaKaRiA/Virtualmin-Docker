@@ -5,10 +5,27 @@
 # list_system_info(). Requires the "System and Server Status" (system-status)
 # module to be installed and enabled in the user's dashboard settings.
 
-do './docker-lib.pl';
+# Loaded by Webmin's foreign_require() from OTHER modules' directories, so
+# the lib must be found via @INC (which foreign_require primes with this
+# module's directory). Never use a './' relative path here - see issues #1, #2.
+require 'docker-lib.pl';
 
 # list_system_info(&data, &in, &modskip) -> list of panel hashrefs.
+# This runs inside OTHER pages (the Webmin home page, Virtualmin support
+# pages). A failure here must never take those pages down, so the real work
+# is wrapped in eval and any error simply yields no panel.
 sub list_system_info
+{
+my @rv = eval { &list_system_info_panels(@_) };
+if ($@) {
+	my $e = $@; $e =~ s/\s+$//;
+	&error_stderr("docker system_info: $e") if (defined(&error_stderr));
+	return ( );
+	}
+return @rv;
+}
+
+sub list_system_info_panels
 {
 my ($data, $in, $modskip) = @_;
 return () if (!&foreign_available($module_name));

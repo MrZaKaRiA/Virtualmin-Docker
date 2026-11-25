@@ -3,6 +3,7 @@ show_stats=Show live CPU/memory stats in the container list?,1,1-Yes,0-No
 show_proxy=Show Virtualmin domains proxied to each container?,1,1-Yes,0-No
 max_log_lines=Default number of log lines to show,3,100
 widget_enabled=Show the Docker panel on the Webmin dashboard?,1,1-Yes,0-No
+summary_cache=Cache dashboard counts for this many seconds (0 = off),3,30
 Behaviour,11
 confirm_destructive=Confirm before destructive actions (remove / prune)?,1,1-Yes,0-No
 scanner=Preferred image scanner,1,auto-Auto detect,scout-Docker Scout,trivy-Trivy

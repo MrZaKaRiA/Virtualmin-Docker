@@ -7,3 +7,4 @@ scanner=auto
 compose_file=docker-compose.yml
 backup_dir=/var/backups/docker
 widget_enabled=1
+summary_cache=30

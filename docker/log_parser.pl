@@ -1,7 +1,10 @@
 # log_parser.pl
 # Renders this module's &webmin_log entries in the Webmin Actions Log module.
 
-do './docker-lib.pl';
+# Loaded by Webmin's foreign_require() from OTHER modules' directories, so
+# the lib must be found via @INC (which foreign_require primes with this
+# module's directory). Never use a './' relative path here - see issues #1, #2.
+require 'docker-lib.pl';
 
 # parse_webmin_log(user, script, action, type, object, &params) -> HTML string
 sub parse_webmin_log

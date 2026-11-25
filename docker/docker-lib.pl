@@ -30,7 +30,7 @@ use WebminCore;
 
 init_config();
 
-our (%config, %text, %gconfig);
+our (%config, %text, %gconfig, $module_var_directory, $module_name);
 
 # JSON::PP ships with core Perl (>= 5.14). Load lazily and degrade gracefully.
 my $have_json = eval { require JSON::PP; JSON::PP->import(qw(decode_json)); 1; };
@@ -101,6 +101,14 @@ sub is_clean_token
 {
 my ($v) = @_;
 return defined($v) && $v !~ /[\0\n\r]/ && $v ne '' && $v !~ /^-/;
+}
+
+sub volume_mount_uses_host_path
+{
+my ($mount) = @_;
+return 0 if (!defined($mount));
+my ($source) = split(/:/, $mount, 2);
+return $source =~ m![/\\]! || $source =~ /^~|^\.\.?$/;
 }
 
 # require_ref(REF) - validate a container reference or abort the request.
@@ -192,18 +200,38 @@ return ($failed, $failed ? ($err || $out) : $out);
 
 # summary_counts() -> hashref of headline numbers for the dashboard / widget.
 # Returns { 'ok' => 0/1, 'error' => ..., running/paused/stopped/containers/images/version }.
+# On failure a 'hint' key carries a plain-language suggestion (HTML, may be '').
+#
+# The home-page widget calls this on every Webmin dashboard render, so a
+# successful result is cached in $module_var_directory/summary.cache for
+# $config{'summary_cache'} seconds (default 30, 0 disables). Failures are never
+# cached so a daemon that comes back is noticed immediately.
 sub summary_counts
 {
+my $ttl = defined($config{'summary_cache'}) ? int($config{'summary_cache'}) : 30;
+my $cf = $ttl > 0 ? &summary_cache_file() : undef;
+if ($cf && -r $cf) {
+	my %c;
+	eval { &read_file($cf, \%c); };
+	if (!$@ && $c{'ok'} && $c{'_time'} && $c{'_time'} <= time() &&
+	    time() - $c{'_time'} < $ttl) {
+		delete($c{'_time'});
+		return \%c;
+		}
+	}
+
 my ($failed, $info) = &get_info();
 if ($failed || ref($info) ne 'HASH') {
-	return { 'ok' => 0, 'error' => (ref($info) ? '' : $info) };
+	my $err = ref($info) ? '' : $info;
+	return { 'ok' => 0, 'error' => $err, 'hint' => &docker_error_hint($err) };
 	}
 # docker info also reports ServerErrors when the client is up but the daemon is not.
 if ($info->{'ServerErrors'} && ref($info->{'ServerErrors'}) eq 'ARRAY' &&
     @{$info->{'ServerErrors'}}) {
-	return { 'ok' => 0, 'error' => join("; ", @{$info->{'ServerErrors'}}) };
+	my $err = join("; ", @{$info->{'ServerErrors'}});
+	return { 'ok' => 0, 'error' => $err, 'hint' => &docker_error_hint($err) };
 	}
-return {
+my $rv = {
 	'ok'         => 1,
 	'containers' => $info->{'Containers'},
 	'running'    => $info->{'ContainersRunning'},
@@ -216,6 +244,29 @@ return {
 	'ncpu'       => $info->{'NCPU'},
 	'memtotal'   => $info->{'MemTotal'},
 	};
+if ($cf) {
+	# Plain key=value via Webmin's write_file; every value is a scalar.
+	my %c = map { $_ => (defined($rv->{$_}) ? $rv->{$_} : '') } keys %$rv;
+	$c{'_time'} = time();
+	eval { &write_file($cf, \%c); };
+	}
+return $rv;
+}
+
+# summary_cache_file() -> path of the dashboard-counts cache, or undef when
+# Webmin provides no per-module var directory (very old Webmin, syntax checks).
+sub summary_cache_file
+{
+return undef if (!$module_var_directory || !-d $module_var_directory);
+return $module_var_directory."/summary.cache";
+}
+
+# clear_summary_cache() - drop the cached counts. Call after any action that
+# changes container/image state so the next page render is fresh.
+sub clear_summary_cache
+{
+my $cf = &summary_cache_file();
+unlink($cf) if ($cf && -e $cf);
 }
 
 # system_df() -> ($failed, \@rows) each { Type, TotalCount, Active, Size, Reclaimable }.
@@ -223,6 +274,83 @@ sub system_df
 {
 my ($failed, $rows) = &docker_json_lines('system df --format "{{json .}}"');
 return ($failed, $rows);
+}
+
+# ----------------------------------------------------------------------------
+# First-run / diagnostics
+# ----------------------------------------------------------------------------
+
+# docker_error_hint(RAW_ERROR) -> HTML hint for the most common daemon errors,
+# or '' when nothing matches. The caller is expected to show the (escaped) raw
+# error as well; this only adds the "what to do about it" sentence.
+sub docker_error_hint
+{
+my ($raw) = @_;
+$raw = '' if (!defined($raw));
+my $ctxlink = "<a href='contexts.cgi'>".&html_escape($text{'nav_contexts'})."</a>";
+my $pathwhere = &html_escape($text{'diag_install_snap_where'});
+if ($raw =~ /permission denied/i && $raw =~ /docker\.sock/i) {
+	return &text('diag_hint_socket', $ctxlink);
+	}
+if ($raw =~ /\bcontext\b.*\bnot found\b/i || $raw =~ /no such context/i) {
+	return &text('diag_hint_context', $ctxlink);
+	}
+if ($raw =~ /Cannot connect to the Docker daemon/i ||
+    $raw =~ /Is the docker daemon running/i) {
+	return &text('diag_hint_daemon',
+		"<tt>systemctl start docker</tt>",
+		"<tt>systemctl enable --now docker</tt>");
+	}
+if ($raw =~ /command not found/i || $raw =~ /docker:\s*not found/i) {
+	return &text('diag_hint_path', $pathwhere);
+	}
+return '';
+}
+
+# docker_install_hint() -> HTML for the "Docker is not installed" first-run
+# page: a one-line explanation, the install command for the detected distro
+# (from Webmin's %gconfig os_type), the snap PATH caveat and a re-check link.
+sub docker_install_hint
+{
+my $os = $gconfig{'os_type'} || '';
+my $osname = join(" ", grep { defined($_) && $_ ne '' }
+	($gconfig{'real_os_type'}, $gconfig{'real_os_version'}));
+$osname = $os.($gconfig{'os_version'} ? " ".$gconfig{'os_version'} : '')
+	if ($osname eq '');
+my $script = "<pre>curl -fsSL https://get.docker.com | sh</pre>\n";
+
+my $html = "<p>".$text{'index_notinstalled'}."</p>\n";
+$html .= "<p>".&text('diag_install_detected',
+	"<tt>".&html_escape($osname || '?')."</tt>")."</p>\n";
+if ($os eq 'debian-linux') {
+	$html .= "<p>".$text{'diag_install_script'}."</p>\n".$script;
+	$html .= "<p>".$text{'diag_install_apt'}."</p>\n".
+		 "<pre>apt install docker.io docker-compose-v2</pre>\n";
+	}
+elsif ($os eq 'redhat-linux') {
+	$html .= "<p>".$text{'diag_install_dnf'}."</p>\n".
+		 "<pre>dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo\n".
+		 "dnf install docker-ce docker-ce-cli containerd.io docker-compose-plugin</pre>\n";
+	$html .= "<p>".$text{'diag_install_script'}."</p>\n".$script;
+	}
+else {
+	my $url = "https://docs.docker.com/engine/install/";
+	$html .= "<p>".&text('diag_install_unknown',
+		"<a href='$url' target='_blank'>$url</a>")."</p>\n";
+	}
+$html .= "<p>".&text('diag_install_after',
+	"<tt>systemctl enable --now docker</tt>")."</p>\n";
+
+# Snap installs put the binary in /snap/bin, which Webmin's has_command()
+# does not search unless the admin adds it to the program search path.
+my $where = &html_escape($text{'diag_install_snap_where'});
+if (&foreign_available("webmin")) {
+	$where = "<a href='".&get_webprefix()."/webmin/edit_os.cgi'>$where</a>";
+	}
+$html .= "<p>".&text('diag_install_snap', $where)."</p>\n";
+$html .= "<p><b><a href='index.cgi'>".&html_escape($text{'diag_check_again'}).
+	 "</a></b></p>\n";
+return $html;
 }
 
 # ----------------------------------------------------------------------------
@@ -452,6 +580,8 @@ foreach my $p (@{$opts->{'ports'} || []}) {
 	}
 foreach my $v (@{$opts->{'volumes'} || []}) {
 	&is_clean_token($v) || return (1, "Invalid volume: $v");
+	return (1, "Host bind mounts require the host_mount permission")
+		if (&volume_mount_uses_host_path($v) && !&can('host_mount'));
 	push(@cmd, '--volume', &sq($v));
 	}
 if ($opts->{'hardened'}) {
@@ -841,6 +971,53 @@ return (undef, undef);
 }
 
 my %COMPOSE_ACTIONS = map { $_ => 1 } qw(up down stop start restart pull ps logs config);
+
+# compose_config_uses_host_mount(FARG) -> ($failed, $uses_host_mount_or_error).
+# Ask Compose for its fully resolved configuration rather than trying to parse
+# YAML ourselves. This covers both short and long volume syntax, variables and
+# multiple compose files. It is deliberately a safe, read-only command.
+sub compose_config_uses_host_mount
+{
+my ($farg) = @_;
+return (1, "JSON support unavailable (install perl JSON::PP)") if (!$have_json);
+my ($failed, $out, $err) = &run_docker(
+	'compose '.$farg.' config --format json', undef, 1);
+return (1, $err || $out || "Could not read the resolved Compose configuration")
+	if ($failed);
+my $cfg = eval { decode_json($out) };
+return (1, "Could not parse the resolved Compose configuration")
+	if (ref($cfg) ne 'HASH');
+foreach my $service (values(%{$cfg->{'services'} || {}})) {
+	next if (ref($service) ne 'HASH');
+	foreach my $mount (@{$service->{'volumes'} || []}) {
+		if (ref($mount) eq 'HASH') {
+			return (0, 1) if (($mount->{'type'} || '') eq 'bind');
+			# Be conservative with an unfamiliar Compose output shape.
+			return (0, 1) if (&volume_mount_uses_host_path($mount->{'source'}));
+			}
+		elsif (&volume_mount_uses_host_path($mount)) {
+			return (0, 1);
+			}
+		}
+	}
+return (0, 0);
+}
+
+# compose_host_mount_allowed(ACTION, FARG) -> ($failed, $error).
+# Actions that can launch or recreate a container must not bypass the host_mount ACL via a
+# Compose file. Read-only and destructive-only actions do not expose a new host
+# path, so leave those available to their existing ACLs.
+sub compose_host_mount_allowed
+{
+my ($action, $farg) = @_;
+return (0, '') if ($action !~ /^(up|start|restart|update)$/ || &can('host_mount'));
+my ($failed, $uses) = &compose_config_uses_host_mount($farg);
+return (1, "Cannot verify whether this Compose project uses host bind mounts: ".
+		$uses." Grant the host_mount permission only if you trust this project.") if ($failed);
+return (1, "Host bind mounts require the host_mount permission") if ($uses);
+return (0, '');
+}
+
 sub compose_run
 {
 my ($file, $action, $opts) = @_;
@@ -865,6 +1042,10 @@ if (defined($opts->{'project'}) && $opts->{'project'} ne '') {
 	$pfx = '--project-name '.&sq($opts->{'project'}).' ';
 	}
 
+my $farg = $pfx.'--file '.&sq($file);
+my ($hmf, $hmo) = &compose_host_mount_allowed($action, $farg);
+return ($hmf, $hmo) if ($hmf);
+
 my $tail = '';
 $tail = ' up --detach' if ($action eq 'up');
 $tail = ' down' if ($action eq 'down');
@@ -879,13 +1060,13 @@ $tail = ' config --quiet' if ($action eq 'config');
 
 if ($kind eq 'plugin') {
 	my ($failed, $out, $err) = &run_docker(
-		'compose '.$pfx.'--file '.&sq($file).$tail, undef, 0);
+		'compose '.$farg.$tail, undef, 0);
 	return ($failed, ($out || '').($err || ''));
 	}
 else {
 	# Legacy docker-compose binary (does not honour the module context flag).
 	my $bin = &has_command('docker-compose');
-	my $cmd = &sq($bin).' '.$pfx.'--file '.&sq($file).$tail;
+	my $cmd = &sq($bin).' '.$farg.$tail;
 	my ($out, $err);
 	my $status = &execute_command($cmd, undef, \$out, \$err, 0, 0);
 	return (($status != 0 ? 1 : 0), ($out || '').($err || ''));
@@ -966,6 +1147,9 @@ return (1, $files) if ($ff);
 # "compose ls" guarantees the existing containers and volumes are reused.
 my $farg = '--project-name '.&sq($name).' '.
 	   join(' ', map { '--file '.&sq($_) } @$files);
+
+my ($hmf, $hmo) = &compose_host_mount_allowed($action, $farg);
+return ($hmf, $hmo) if ($hmf);
 
 if ($action eq 'update') {
 	my ($f1, $o1, $e1) = &run_docker('compose '.$farg.' pull', undef, 0);
@@ -1510,8 +1694,10 @@ return $1 if ($u =~ m!://[^/:]+:(\d+)!);
 return ($u =~ m!^https:!i) ? 443 : 80;
 }
 
-# virtualmin_domains() -> listref of { id, dom, proxy_pass } read directly from
-# Virtualmin's domain config files (fast, read-only, no CLI). Empty off Virtualmin.
+# virtualmin_domains() -> listref of { id, dom, proxy_pass, home, user, group }
+# read directly from Virtualmin's domain config files (fast, read-only, no CLI).
+# Empty off Virtualmin. home/user/group are used by the guided Compose deploy
+# to place a new project inside the domain's home, owned by the domain user.
 sub virtualmin_domains
 {
 my @out;
@@ -1527,7 +1713,9 @@ foreach my $f (@files) {
 	eval { &read_file("$dir/$f", \%dom); };
 	next if (!$dom{'dom'});
 	push(@out, { 'id' => $f, 'dom' => $dom{'dom'},
-		     'proxy_pass' => $dom{'proxy_pass'} });
+		     'proxy_pass' => $dom{'proxy_pass'},
+		     'home' => $dom{'home'}, 'user' => $dom{'user'},
+		     'group' => $dom{'group'} });
 	}
 return [ sort { $a->{'dom'} cmp $b->{'dom'} } @out ];
 }
@@ -1928,6 +2116,171 @@ if (@st) {
 	chmod($st[2] & 07777, $env);
 	}
 return (0, $env);
+}
+
+# ----------------------------------------------------------------------------
+# Guided Compose deploy
+# "Deploy a new Compose project" for non-technical users: pick a name and a
+# location, paste a compose file, optionally an .env, and the module creates
+# the folder, writes the files, validates them and starts the stack.
+# ----------------------------------------------------------------------------
+
+# new_project_dir(PROJECT, DOMAIN, CUSTOM_DIR) -> ($failed, $dir, $uid, $gid)
+# Resolve the folder a new project lives in, and who should own it:
+#   * DOMAIN given  -> <domain home>/docker/<project>, owned by the domain's
+#     user/group. The domain MUST be one Virtualmin knows about - the posted
+#     value is never trusted, it is looked up in virtualmin_domains().
+#   * CUSTOM_DIR    -> used as-is: must be absolute, clean and free of "..".
+#   * neither       -> /opt/docker/<project>, owned by root.
+# On failure $dir holds a plain-language error message.
+sub new_project_dir
+{
+my ($project, $domain, $custom) = @_;
+return (1, "Invalid project name (must be lowercase letters, digits, - or _)")
+	if (!&is_valid_project_name($project));
+my ($dir, $uid, $gid) = (undef, 0, 0);
+if (defined($domain) && $domain ne '') {
+	my ($d) = grep { $_->{'dom'} eq $domain } @{&virtualmin_domains()};
+	return (1, "Unknown Virtualmin domain: $domain") if (!$d);
+	my $home = $d->{'home'};
+	return (1, "The domain $domain has no usable home directory recorded")
+		if (!&is_clean_token($home) || $home !~ m!^/! || $home =~ /\.\./);
+	$home =~ s!/+$!!;
+	$dir = $home."/docker/".$project;
+	if ($d->{'user'}) {
+		my @pw = getpwnam($d->{'user'});
+		return (1, "The domain user ".$d->{'user'}." does not exist on this system")
+			if (!@pw);
+		($uid, $gid) = ($pw[2], $pw[3]);
+		}
+	if ($d->{'group'}) {
+		my @gr = getgrnam($d->{'group'});
+		$gid = $gr[2] if (@gr);
+		}
+	}
+elsif (defined($custom) && $custom =~ /\S/) {
+	$custom =~ s/^\s+|\s+$//g;
+	return (1, "Invalid directory") if (!&is_clean_token($custom));
+	return (1, "The directory must be a FULL path starting with /, for example ".
+		   "/opt/docker/".$project) if ($custom !~ m!^/!);
+	return (1, "The directory must not contain \"..\"") if ($custom =~ /\.\./);
+	$custom =~ s!/{2,}!/!g;
+	$custom =~ s!/+$!!;
+	return (1, "The directory cannot be the root of the filesystem") if ($custom eq '');
+	$dir = $custom;
+	}
+else {
+	$dir = "/opt/docker/".$project;
+	}
+return (0, $dir, $uid, $gid);
+}
+
+# create_compose_project(PROJECT, DIR, COMPOSE, ENV, UID, GID)
+#   -> ($failed, $msg, $file)
+# Create DIR (mkdir -p, 0755), write docker-compose.yml and - when ENV is not
+# empty - .env (0600), chown everything to UID/GID, then validate the result
+# with "compose config --quiet". Refuses to touch a folder that already holds
+# a docker-compose.yml. On a validation failure the files are LEFT IN PLACE so
+# the user can fix them; $msg then carries the compose output. $file is the
+# full path of the compose file.
+sub create_compose_project
+{
+my ($project, $dir, $compose, $env, $uid, $gid) = @_;
+return (1, "Invalid project name (must be lowercase letters, digits, - or _)")
+	if (!&is_valid_project_name($project));
+return (1, "Invalid project directory")
+	if (!&is_clean_token($dir) || $dir !~ m!^/! || $dir =~ /\.\./);
+$compose = '' if (!defined($compose));
+$env = '' if (!defined($env));
+return (1, "The compose file content contains a NUL byte") if ($compose =~ /\0/);
+return (1, "The .env content contains a NUL byte") if ($env =~ /\0/);
+$compose =~ s/\r\n?/\n/g;
+$env =~ s/\r\n?/\n/g;
+return (1, "The compose file content is empty") if ($compose !~ /\S/);
+$compose .= "\n" if ($compose !~ /\n\z/);
+$env .= "\n" if ($env =~ /\S/ && $env !~ /\n\z/);
+$uid = 0 if (!defined($uid) || $uid !~ /^\d+$/);
+$gid = 0 if (!defined($gid) || $gid !~ /^\d+$/);
+
+my $file = $dir."/docker-compose.yml";
+my $envfile = $dir."/.env";
+return (1, "A project already exists in $dir (it already contains a ".
+	   "docker-compose.yml). Choose another name or directory, or manage ".
+	   "the existing project from the list above.") if (-e $file);
+return (1, "$dir exists but is not a directory") if (-e $dir && !-d $dir);
+
+# Refuse symbolic links in the path that are not owned by root. The folder
+# may sit inside a domain user's home, and that user must not be able to
+# redirect a write made by root (e.g. ~/docker -> /etc) by planting a link
+# in advance. Root-owned links (/var -> /private/var, /home -> /srv/home)
+# were created by the admin and are trusted.
+my $path = '';
+foreach my $part (grep { $_ ne '' } split(m!/!, $dir)) {
+	$path .= "/".$part;
+	my @st = lstat($path);
+	return (1, "$path is a symbolic link not owned by root; refusing to ".
+		   "create the project there")
+		if (@st && -l _ && $st[4] != 0);
+	}
+
+# mkdir -p, remembering what we created so only new folders are chowned.
+my @created;
+$path = '';
+foreach my $part (grep { $_ ne '' } split(m!/!, $dir)) {
+	$path .= "/".$part;
+	next if (-d $path);
+	mkdir($path, 0755) || return (1, "Could not create directory $path: $!");
+	push(@created, $path);
+	}
+chown($uid, $gid, @created) if (@created);
+
+# Create the files atomically: O_EXCL refuses anything that already exists
+# (including a dangling symlink) and O_NOFOLLOW never writes through a link.
+my ($wf, $werr) = &write_new_file($file, $compose, 0640, $uid, $gid);
+return (1, $werr) if ($wf);
+if ($env =~ /\S/) {
+	($wf, $werr) = &write_new_file($envfile, $env, 0600, $uid, $gid);
+	return (1, $werr) if ($wf);
+	}
+
+# Validate before anything is started. The files stay so they can be fixed.
+my ($vf, $vo) = &compose_run($file, 'config', { 'project' => $project });
+if ($vf) {
+	return (1, "The files were written to $dir, but Docker Compose rejected ".
+		   "the compose file. Edit $file to fix the problem (the folder ".
+		   "has been left in place), then start the project from the ".
+		   "list above.\n\n".$vo, $file);
+	}
+return (0, "", $file);
+}
+
+# write_new_file(PATH, CONTENT, MODE, UID, GID) -> ($failed, $error)
+# Create PATH with O_CREAT|O_EXCL|O_NOFOLLOW so an existing file or a planted
+# symlink is refused instead of overwritten or followed, then chown it.
+sub write_new_file
+{
+my ($path, $content, $mode, $uid, $gid) = @_;
+require Fcntl;
+my $flags = Fcntl::O_WRONLY() | Fcntl::O_CREAT() | Fcntl::O_EXCL();
+$flags |= Fcntl::O_NOFOLLOW() if (defined(&Fcntl::O_NOFOLLOW));
+my $fh;
+sysopen($fh, $path, $flags, $mode)
+	|| return (1, (-e $path || -l $path)
+		? "$path already exists; refusing to overwrite it"
+		: "Could not write $path: $!");
+print $fh $content;
+close($fh) || return (1, "Could not write $path: $!");
+chmod($mode, $path);
+chown($uid, $gid, $path);
+return (0, undef);
+}
+
+# start_compose_project(PROJECT, FILE) -> ($failed, $output)
+# "compose up -d" for a project just created by create_compose_project.
+sub start_compose_project
+{
+my ($project, $file) = @_;
+return &compose_run($file, 'up', { 'project' => $project });
 }
 
 # ----------------------------------------------------------------------------

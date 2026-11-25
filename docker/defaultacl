@@ -8,3 +8,4 @@ registry=1
 context=1
 backup=1
 proxy=1
+host_mount=0
